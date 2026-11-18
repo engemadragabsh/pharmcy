@@ -1,0 +1,691 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ══════════════════════════ ENUMS ══════════════════════════
+
+enum Role {
+  ADMIN
+  PHARMACIST
+  CASHIER
+  ACCOUNTANT
+  INVENTORY_MANAGER
+}
+
+enum ProductCategory {
+  RX
+  OTC
+  MEDICAL_SUPPLY
+  COSMETIC
+  FOOD
+}
+
+enum MovementType {
+  RECEIVE
+  SALE
+  SALE_REFUND
+  PURCHASE_RETURN
+  TRANSFER_OUT
+  TRANSFER_IN
+  ADJUSTMENT
+  STOCK_COUNT
+}
+
+enum CustomerType {
+  NORMAL
+  VIP
+  INSURANCE
+}
+
+enum PaymentMethod {
+  CASH
+  VISA
+  WALLET
+  CREDIT
+  INSURANCE
+}
+
+enum InvoiceType {
+  SALE
+  RETURN
+}
+
+enum InvoiceStatus {
+  COMPLETED
+  HELD
+  REFUNDED
+  PARTIALLY_REFUNDED
+  CANCELLED
+}
+
+enum PrescriptionStatus {
+  PENDING
+  PARTIAL
+  DISPENSED
+  CANCELLED
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  SENT
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CANCELLED
+}
+
+enum ShiftStatus {
+  OPEN
+  CLOSED
+}
+
+enum InteractionSeverity {
+  MINOR
+  MODERATE
+  MAJOR
+}
+
+enum NotificationType {
+  LOW_STOCK
+  EXPIRY
+  PENDING_RX
+  SYSTEM
+  BACKUP
+}
+
+enum NotificationSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+// ══════════════════════════ AUTH & ORG ══════════════════════════
+
+model User {
+  id           String    @id @default(cuid())
+  username     String    @unique
+  passwordHash String
+  fullName     String
+  fullNameEn   String?
+  role         Role
+  pin          String? // PIN سريع للكاشير
+  phone        String?
+  branchId     String?
+  branch       Branch?   @relation(fields: [branchId], references: [id])
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  invoices       Invoice[]
+  stockMovements StockMovement[]
+  shifts         Shift[]
+  prescriptions  Prescription[]
+  auditLogs      AuditLog[]
+  purchaseOrders PurchaseOrder[]
+  goodsReceipts  GoodsReceipt[]
+  expenses       Expense[]
+}
+
+model Branch {
+  id        String  @id @default(cuid())
+  code      String  @unique
+  name      String
+  nameEn    String
+  address   String?
+  phone     String?
+  isActive  Boolean @default(true)
+  isDefault Boolean @default(false)
+
+  users          User[]
+  batches        Batch[]
+  invoices       Invoice[]
+  stockMovements StockMovement[]
+  prescriptions  Prescription[]
+  shifts         Shift[]
+  expenses       Expense[]
+  purchaseOrders PurchaseOrder[]
+  goodsReceipts  GoodsReceipt[]
+  stockCounts    StockCount[]
+}
+
+// ══════════════════════════ CATALOG ══════════════════════════
+
+model Manufacturer {
+  id      String  @id @default(cuid())
+  name    String  @unique
+  nameEn  String?
+  country String?
+
+  products Product[]
+}
+
+model ActiveIngredient {
+  id      String  @id @default(cuid())
+  name    String  @unique // الاسم بالعربية
+  nameEn  String? // الاسم العلمي بالإنجليزية
+  atcCode String?
+
+  products      Product[]
+  interactionsA DrugInteraction[] @relation("ingredientA")
+  interactionsB DrugInteraction[] @relation("ingredientB")
+}
+
+model DosageForm {
+  id     String  @id @default(cuid())
+  name   String  @unique
+  nameEn String?
+
+  products Product[]
+}
+
+model UnitOfMeasure {
+  id     String  @id @default(cuid())
+  name   String  @unique
+  nameEn String?
+
+  products Product[]
+}
+
+model Product {
+  id                   String            @id @default(cuid())
+  barcode              String            @unique
+  tradeName            String
+  tradeNameEn          String?
+  scientificName       String?
+  activeIngredientId   String?
+  activeIngredient     ActiveIngredient? @relation(fields: [activeIngredientId], references: [id])
+  dosageFormId         String?
+  dosageForm           DosageForm?       @relation(fields: [dosageFormId], references: [id])
+  concentration        String?
+  packSize             String?
+  unitId               String?
+  unit                 UnitOfMeasure?    @relation(fields: [unitId], references: [id])
+  manufacturerId       String?
+  manufacturer         Manufacturer?     @relation(fields: [manufacturerId], references: [id])
+  originCountry        String?
+  category             ProductCategory   @default(OTC)
+  purchasePrice        Float             @default(0)
+  sellPrice            Float             @default(0)
+  wholesalePrice       Float             @default(0)
+  taxRate              Float             @default(14)
+  minStock             Int               @default(5)
+  reorderPoint         Int               @default(10)
+  shelfLocation        String?
+  requiresPrescription Boolean           @default(false)
+  isActive             Boolean           @default(true)
+  notes                String?
+  brochureName         String?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+
+  batches            Batch[]
+  invoiceItems       InvoiceItem[]
+  stockMovements     StockMovement[]
+  purchaseOrderItems PurchaseOrderItem[]
+  goodsReceiptItems  GoodsReceiptItem[]
+  prescriptionItems  PrescriptionItem[]
+}
+
+model Batch {
+  id            String   @id @default(cuid())
+  productId     String
+  product       Product  @relation(fields: [productId], references: [id])
+  branchId      String
+  branch        Branch   @relation(fields: [branchId], references: [id])
+  batchNo       String
+  expiryDate    DateTime
+  quantity      Int      @default(0)
+  costPrice     Float    @default(0)
+  shelfLocation String?
+  createdAt     DateTime @default(now())
+
+  invoiceItems   InvoiceItem[]
+  stockMovements StockMovement[]
+}
+
+model DrugInteraction {
+  id            String              @id @default(cuid())
+  ingredientAId String
+  ingredientA   ActiveIngredient    @relation("ingredientA", fields: [ingredientAId], references: [id])
+  ingredientBId String
+  ingredientB   ActiveIngredient    @relation("ingredientB", fields: [ingredientBId], references: [id])
+  severity      InteractionSeverity @default(MODERATE)
+  description   String
+}
+
+// ══════════════════════════ STOCK ══════════════════════════
+
+model StockMovement {
+  id        String       @id @default(cuid())
+  productId String
+  product   Product      @relation(fields: [productId], references: [id])
+  batchId   String?
+  batch     Batch?       @relation(fields: [batchId], references: [id])
+  branchId  String
+  branch    Branch       @relation(fields: [branchId], references: [id])
+  type      MovementType
+  quantity  Int // موجب = دخول، سالب = خروج
+  refType   String?
+  refId     String?
+  note      String?
+  userId    String?
+  user      User?        @relation(fields: [userId], references: [id])
+  createdAt DateTime     @default(now())
+}
+
+model StockCount {
+  id        String           @id @default(cuid())
+  branchId  String
+  branch    Branch           @relation(fields: [branchId], references: [id])
+  userId    String?
+  status    String           @default("OPEN") // OPEN / CLOSED
+  note      String?
+  createdAt DateTime         @default(now())
+  closedAt  DateTime?
+  items     StockCountItem[]
+}
+
+model StockCountItem {
+  id         String     @id @default(cuid())
+  countId    String
+  count      StockCount @relation(fields: [countId], references: [id])
+  batchId    String
+  systemQty  Int
+  countedQty Int
+  variance   Int
+  note       String?
+}
+
+// ══════════════════════════ SALES ══════════════════════════
+
+model Customer {
+  id                String       @id @default(cuid())
+  code              String       @unique
+  name              String
+  phone             String?
+  email             String?
+  address           String?
+  gender            String?
+  birthDate         DateTime?
+  type              CustomerType @default(NORMAL)
+  insuranceProvider String?
+  insuranceNumber   String?
+  allergies         String? // مفصولة بفواصل — مواد فعالة
+  chronicDiseases   String?
+  medicalHistory    String?
+  loyaltyPoints     Int          @default(0)
+  creditBalance     Float        @default(0)
+  notes             String?
+  isActive          Boolean      @default(true)
+  createdAt         DateTime     @default(now())
+
+  invoices      Invoice[]
+  prescriptions Prescription[]
+}
+
+model Invoice {
+  id                    String        @id @default(cuid())
+  no                    String        @unique
+  type                  InvoiceType   @default(SALE)
+  status                InvoiceStatus @default(COMPLETED)
+  customerId            String?
+  customer              Customer?     @relation(fields: [customerId], references: [id])
+  userId                String
+  user                  User          @relation(fields: [userId], references: [id])
+  branchId              String
+  branch                Branch        @relation(fields: [branchId], references: [id])
+  subtotal              Float         @default(0)
+  itemDiscount          Float         @default(0)
+  invoiceDiscount       Float         @default(0)
+  tax                   Float         @default(0)
+  total                 Float         @default(0)
+  paid                  Float         @default(0)
+  changeDue             Float         @default(0)
+  paymentMethod         PaymentMethod @default(CASH)
+  originalInvoiceId     String?
+  prescriptionId        String?
+  eInvoiceUuid          String?
+  loyaltyPointsEarned   Int           @default(0)
+  loyaltyPointsRedeemed Int           @default(0)
+  notes                 String?
+  heldAt                DateTime?
+  createdAt             DateTime      @default(now())
+
+  items           InvoiceItem[]
+  refunds         Invoice[]     @relation("originalInvoice")
+  originalInvoice Invoice?      @relation("originalInvoice", fields: [originalInvoiceId], references: [id])
+}
+
+model InvoiceItem {
+  id          String   @id @default(cuid())
+  invoiceId   String
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id])
+  productId   String?
+  product     Product? @relation(fields: [productId], references: [id])
+  batchId     String?
+  batch       Batch?   @relation(fields: [batchId], references: [id])
+  name        String // snapshot وقت البيع
+  qty         Int
+  unitPrice   Float
+  discount    Float    @default(0)
+  taxRate     Float    @default(14)
+  taxAmount   Float    @default(0)
+  total       Float
+  costPrice   Float    @default(0)
+  refundedQty Int      @default(0)
+}
+
+// ══════════════════════════ PURCHASING ══════════════════════════
+
+model Supplier {
+  id            String   @id @default(cuid())
+  code          String   @unique
+  name          String
+  contactPerson String?
+  phone         String?
+  email         String?
+  address       String?
+  paymentTerms  String?
+  balance       Float    @default(0)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+
+  purchaseOrders PurchaseOrder[]
+  goodsReceipts  GoodsReceipt[]
+}
+
+model PurchaseOrder {
+  id         String              @id @default(cuid())
+  no         String              @unique
+  supplierId String
+  supplier   Supplier            @relation(fields: [supplierId], references: [id])
+  branchId   String
+  branch     Branch              @relation(fields: [branchId], references: [id])
+  userId     String?
+  user       User?               @relation(fields: [userId], references: [id])
+  status     PurchaseOrderStatus @default(DRAFT)
+  subtotal   Float               @default(0)
+  tax        Float               @default(0)
+  total      Float               @default(0)
+  expectedAt DateTime?
+  notes      String?
+  createdAt  DateTime            @default(now())
+
+  items         PurchaseOrderItem[]
+  goodsReceipts GoodsReceipt[]
+}
+
+model PurchaseOrderItem {
+  id          String        @id @default(cuid())
+  orderId     String
+  order       PurchaseOrder @relation(fields: [orderId], references: [id])
+  productId   String
+  product     Product       @relation(fields: [productId], references: [id])
+  qty         Int
+  unitCost    Float
+  receivedQty Int           @default(0)
+}
+
+model GoodsReceipt {
+  id              String         @id @default(cuid())
+  no              String         @unique
+  supplierId      String
+  supplier        Supplier       @relation(fields: [supplierId], references: [id])
+  purchaseOrderId String?
+  purchaseOrder   PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
+  branchId        String
+  branch          Branch         @relation(fields: [branchId], references: [id])
+  userId          String?
+  user            User?          @relation(fields: [userId], references: [id])
+  subtotal        Float          @default(0)
+  tax             Float          @default(0)
+  total           Float          @default(0)
+  notes           String?
+  createdAt       DateTime       @default(now())
+
+  items GoodsReceiptItem[]
+}
+
+model GoodsReceiptItem {
+  id            String       @id @default(cuid())
+  receiptId     String
+  receipt       GoodsReceipt @relation(fields: [receiptId], references: [id])
+  productId     String
+  product       Product      @relation(fields: [productId], references: [id])
+  batchNo       String
+  expiryDate    DateTime
+  qty           Int
+  unitCost      Float
+  shelfLocation String?
+}
+
+// ══════════════════════════ PHARMACY CLINICAL ══════════════════════════
+
+model Doctor {
+  id        String  @id @default(cuid())
+  name      String
+  specialty String?
+  clinic    String?
+  phone     String?
+
+  prescriptions Prescription[]
+}
+
+model Prescription {
+  id         String             @id @default(cuid())
+  no         String             @unique
+  customerId String?
+  customer   Customer?          @relation(fields: [customerId], references: [id])
+  doctorId   String?
+  doctor     Doctor?            @relation(fields: [doctorId], references: [id])
+  branchId   String?
+  userId     String?
+  user       User?              @relation(fields: [userId], references: [id])
+  status     PrescriptionStatus @default(PENDING)
+  source     String             @default("MANUAL") // MANUAL / IMAGE / OCR
+  notes      String?
+  invoiceId  String?
+  createdAt  DateTime           @default(now())
+
+  items  PrescriptionItem[]
+  branch Branch?            @relation(fields: [branchId], references: [id])
+}
+
+model PrescriptionItem {
+  id             String       @id @default(cuid())
+  prescriptionId String
+  prescription   Prescription @relation(fields: [prescriptionId], references: [id])
+  productId      String?
+  product        Product?     @relation(fields: [productId], references: [id])
+  productName    String
+  dosage         String?
+  qty            Int
+  dispensedQty   Int          @default(0)
+}
+
+// ══════════════════════════ FINANCE ══════════════════════════
+
+model Shift {
+  id              String      @id @default(cuid())
+  userId          String
+  user            User        @relation(fields: [userId], references: [id])
+  branchId        String
+  branch          Branch      @relation(fields: [branchId], references: [id])
+  openingBalance  Float       @default(0)
+  closingBalance  Float?
+  expectedBalance Float?
+  variance        Float?
+  status          ShiftStatus @default(OPEN)
+  notes           String?
+  openedAt        DateTime    @default(now())
+  closedAt        DateTime?
+}
+
+model Expense {
+  id        String   @id @default(cuid())
+  type      String   @default("EXPENSE") // EXPENSE / INCOME
+  category  String // إيجار / كهرباء / رواتب / إيراد آخر ...
+  amount    Float
+  note      String?
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  branchId  String
+  branch    Branch   @relation(fields: [branchId], references: [id])
+  createdAt DateTime @default(now())
+}
+
+// ══════════════════════════ HR (مبسط) ══════════════════════════
+
+model Employee {
+  id       String   @id @default(cuid())
+  userId   String?
+  name     String
+  position String?
+  phone    String?
+  salary   Float    @default(0)
+  hireDate DateTime @default(now())
+  isActive Boolean  @default(true)
+
+  attendances Attendance[]
+  payrolls    Payroll[]
+}
+
+model Attendance {
+  id         String    @id @default(cuid())
+  employeeId String
+  employee   Employee  @relation(fields: [employeeId], references: [id])
+  date       DateTime
+  checkIn    DateTime?
+  checkOut   DateTime?
+  status     String    @default("PRESENT") // PRESENT / ABSENT / LATE / LEAVE
+}
+
+model Payroll {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  month      String // 2026-11
+  baseSalary Float
+  deductions Float    @default(0)
+  bonuses    Float    @default(0)
+  netPaid    Float
+  paidAt     DateTime @default(now())
+}
+
+// ══════════════════════════ SYSTEM ══════════════════════════
+
+model ServiceItem {
+  id       String  @id @default(cuid())
+  name     String
+  nameEn   String?
+  price    Float   @default(0)
+  isActive Boolean @default(true)
+}
+
+model Coupon {
+  id        String    @id @default(cuid())
+  code      String    @unique
+  type      String    @default("PERCENT") // PERCENT / FIXED
+  value     Float
+  isActive  Boolean   @default(true)
+  expiresAt DateTime?
+}
+
+model Notification {
+  id        String               @id @default(cuid())
+  type      NotificationType
+  severity  NotificationSeverity @default(INFO)
+  title     String
+  message   String
+  refType   String?
+  refId     String?
+  isRead    Boolean              @default(false)
+  createdAt DateTime             @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  userName  String?
+  action    String // LOGIN / CREATE / UPDATE / DELETE / SALE / REFUND ...
+  entity    String
+  entityId  String?
+  details   String?
+  createdAt DateTime @default(now())
+}
+
+model SettingSnapshot {
+  id        String   @id @default(cuid())
+  userId    String?
+  userName  String?
+  snapshot  String // JSON كامل للإعدادات قبل التعديل
+  createdAt DateTime @default(now())
+}
+
+model Settings {
+  id              String    @id @default("main")
+  // الملف التعريفي
+  pharmacyName    String
+  pharmacyNameEn  String?
+  logoUrl         String?
+  commercialReg   String?
+  taxNumber       String?
+  licenseNumber   String?
+  licenseExpiry   DateTime?
+  address         String?
+  phone           String?
+  email           String?
+  // الفواتير والضرائب
+  currency        String    @default("EGP")
+  defaultTaxRate  Float     @default(14)
+  invoicePrefix   String    @default("INV-")
+  nextInvoiceSeq  Int       @default(1)
+  nextPOSeq       Int       @default(1)
+  nextGRNSeq      Int       @default(1)
+  nextRxSeq       Int       @default(1)
+  invoiceHeader   String?
+  invoiceFooter   String?
+  invoiceTerms    String?
+  // نقطة البيع
+  defaultPaymentMethod String @default("CASH")
+  printerType     String    @default("THERMAL") // THERMAL / A4
+  loyaltyEnabled  Boolean   @default(true)
+  loyaltyEarnRate Float     @default(50) // كل 50 جنيه = نقطة
+  loyaltyRedeemRate Float   @default(0.25) // النقطة = 0.25 جنيه
+  cashierMaxDiscount Float  @default(10) // أقصى خصم للكاشير ٪
+  // المخزون والتنبيهات
+  defaultReorderPoint Int   @default(10)
+  expiryAlertDays String    @default("90,30,7")
+  stockMethod     String    @default("FEFO") // FEFO / FIFO / AVG
+  alertLowStock   Boolean   @default(true)
+  alertExpiry     Boolean   @default(true)
+  alertPendingRx  Boolean   @default(true)
+  // الإشعارات
+  notifyInApp     Boolean   @default(true)
+  notifyEmail     Boolean   @default(false)
+  notifySms       Boolean   @default(false)
+  notifyWhatsapp  Boolean   @default(false)
+  autoReportsEmail String?
+  // النسخ الاحتياطي
+  backupSchedule  String    @default("DAILY") // MANUAL / DAILY / WEEKLY
+  backupLocation  String    @default("LOCAL") // LOCAL / CLOUD
+  lastBackupAt    DateTime?
+  // المظهر واللغة
+  theme           String    @default("SYSTEM")
+  language        String    @default("AR")
+  primaryColor    String    @default("emerald")
+  // التكاملات
+  stripeKey       String?
+  paymobKey       String?
+  etaClientId     String?
+  etaSecret       String?
+  whatsappToken   String?
+  smsProvider     String?
+  updatedAt       DateTime  @updatedAt
+}

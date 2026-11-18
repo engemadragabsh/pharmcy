@@ -1,0 +1,841 @@
+openapi: 3.0.3
+info:
+  title: Al-Shifaa Pharmacy Management System API
+  description: |
+    واجهة REST لنظام إدارة الصيدليات — صيدلية الشفاء.
+    - المصادقة: JWT (Bearer) — رمز وصول صالح لساعة + رمز تجديد لأسبوع.
+    - الصلاحيات: RBAC بخمسة أدوار (ADMIN, PHARMACIST, CASHIER, ACCOUNTANT, INVENTORY_MANAGER).
+    - رسائل الخطأ بالعربية: { "error": "..." }
+    - البيئة المصرية: عملة EGP، ضريبة افتراضية 14%، فاتورة إلكترونية ETA (UUID + QR).
+  version: 1.0.0
+  contact:
+    name: Al-Shifaa Pharmacy PMS
+
+servers:
+  - url: /api
+    description: نفس أصل التطبيق
+
+tags:
+  - name: Auth
+  - name: Dashboard
+  - name: Products
+  - name: Stock
+  - name: Invoices
+  - name: Prescriptions
+  - name: Customers
+  - name: Suppliers
+  - name: Finance
+  - name: Reports
+  - name: Settings
+  - name: System
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Role:
+      type: string
+      enum: [ADMIN, PHARMACIST, CASHIER, ACCOUNTANT, INVENTORY_MANAGER]
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "ليس لديك صلاحية لتنفيذ هذه العملية"
+    SessionUser:
+      type: object
+      properties:
+        id: { type: string }
+        username: { type: string }
+        fullName: { type: string }
+        role: { $ref: '#/components/schemas/Role' }
+        branchId: { type: string, nullable: true }
+    LoginResponse:
+      type: object
+      properties:
+        accessToken: { type: string }
+        refreshToken: { type: string }
+        user: { $ref: '#/components/schemas/SessionUser' }
+        branches:
+          type: array
+          items: { $ref: '#/components/schemas/Branch' }
+    Branch:
+      type: object
+      properties:
+        id: { type: string }
+        code: { type: string }
+        name: { type: string }
+        nameEn: { type: string }
+        isDefault: { type: boolean }
+    LookupItem:
+      type: object
+      properties:
+        id: { type: string }
+        barcode: { type: string }
+        tradeName: { type: string }
+        sellPrice: { type: number }
+        taxRate: { type: number }
+        requiresPrescription: { type: boolean }
+        availableQty: { type: integer }
+        nearestExpiry: { type: string, format: date-time, nullable: true }
+    Invoice:
+      type: object
+      properties:
+        id: { type: string }
+        no: { type: string, example: "INV-00145" }
+        type: { type: string, enum: [SALE, RETURN] }
+        status: { type: string, enum: [COMPLETED, HELD, REFUNDED, PARTIALLY_REFUNDED, CANCELLED] }
+        subtotal: { type: number }
+        itemDiscount: { type: number }
+        invoiceDiscount: { type: number }
+        tax: { type: number }
+        total: { type: number }
+        paymentMethod: { type: string, enum: [CASH, VISA, WALLET, CREDIT, INSURANCE] }
+        eInvoiceUuid: { type: string, format: uuid }
+        createdAt: { type: string, format: date-time }
+
+  parameters:
+    page:
+      name: page
+      in: query
+      schema: { type: integer, default: 1 }
+    limit:
+      name: limit
+      in: query
+      schema: { type: integer, default: 20, maximum: 100 }
+
+security:
+  - bearerAuth: []
+
+paths:
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: تسجيل الدخول باسم المستخدم وكلمة المرور
+      security: []
+      description: محدود بـ 10 محاولات/دقيقة لكل IP
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string, example: admin }
+                password: { type: string, example: "Admin@123" }
+      responses:
+        '200': { description: دخول ناجح — توكنات + فروع, content: { application/json: { schema: { $ref: '#/components/schemas/LoginResponse' } } } }
+        '401': { description: بيانات خاطئة, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '429': { description: محاولات كثيرة }
+
+  /auth/pin:
+    post:
+      tags: [Auth]
+      summary: دخول سريع بـ PIN (4 أرقام)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pin]
+              properties:
+                pin: { type: string, example: "1234" }
+      responses:
+        '200': { description: نجاح, content: { application/json: { schema: { $ref: '#/components/schemas/LoginResponse' } } } }
+        '401': { description: PIN خاطئ }
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: تجديد رمز الوصول
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string }
+      responses:
+        '200': { description: توكنات جديدة }
+        '401': { description: رمز تجديد غير صالح }
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: المستخدم الحالي + الفروع النشطة
+      responses:
+        '200': { description: بيانات الجلسة }
+
+  /dashboard:
+    get:
+      tags: [Dashboard]
+      summary: مؤشرات اللوحة والرسوم والتنبيهات
+      parameters:
+        - name: branchId
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: KPIs + charts + alerts + recentInvoices
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  kpis:
+                    type: object
+                    properties:
+                      todaySales: { type: number }
+                      monthSales: { type: number }
+                      todayInvoices: { type: integer }
+                      lowStockCount: { type: integer }
+                      expiringCount: { type: integer }
+                      expiredCount: { type: integer }
+                      pendingRx: { type: integer }
+                      cashInDrawer: { type: number }
+
+  /products:
+    get:
+      tags: [Products]
+      summary: قائمة الأدوية (بحث/تصفية/ترقيم)
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+        - { name: category, in: query, schema: { type: string, enum: [RX, OTC, MEDICAL_SUPPLY, COSMETIC, FOOD] } }
+        - { name: active, in: query, schema: { type: string, enum: ["true", "false"] } }
+        - { $ref: '#/components/parameters/page' }
+        - { $ref: '#/components/parameters/limit' }
+      responses:
+        '200': { description: items + total + page }
+    post:
+      tags: [Products]
+      summary: إضافة دواء — أدوار: ADMIN, PHARMACIST, INVENTORY_MANAGER
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [barcode, tradeName, purchasePrice, sellPrice]
+              properties:
+                barcode: { type: string }
+                tradeName: { type: string }
+                tradeNameEn: { type: string }
+                scientificName: { type: string }
+                activeIngredientId: { type: string }
+                category: { type: string, enum: [RX, OTC, MEDICAL_SUPPLY, COSMETIC, FOOD] }
+                purchasePrice: { type: number }
+                sellPrice: { type: number }
+                taxRate: { type: number, default: 14 }
+                minStock: { type: integer }
+                reorderPoint: { type: integer }
+                requiresPrescription: { type: boolean }
+      responses:
+        '201': { description: أُنشئ }
+        '400': { description: بيانات ناقصة أو باركود مكرر }
+
+  /products/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Products]
+      summary: تفاصيل دواء (تشغيلات + بدائل + حركات)
+      responses:
+        '200': { description: كامل }
+        '404': { description: غير موجود }
+    put:
+      tags: [Products]
+      summary: تعديل دواء
+      responses:
+        '200': { description: مُعدّل }
+    delete:
+      tags: [Products]
+      summary: تعطيل/حذف دواء
+      responses:
+        '200': { description: "تم التعطيل (مرتبط بفواتير) أو الحذف" }
+
+  /products/lookup:
+    get:
+      tags: [Products]
+      summary: بحث سريع لنقطة البيع (باركود دقيق / اسم / مادة فعالة)
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string } }
+        - { name: branchId, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: حتى 12 صنفاً مع الرصيد المتاح (تشغيلات غير منتهية)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/LookupItem' }
+
+  /stock:
+    get:
+      tags: [Stock]
+      summary: "حركات أو تشغيلات — view=movements|batches"
+      parameters:
+        - { name: view, in: query, schema: { type: string, enum: [movements, batches], default: movements } }
+        - { name: filter, in: query, schema: { type: string, enum: [EXPIRING, EXPIRED] } }
+        - { name: branchId, in: query, schema: { type: string } }
+        - { name: productId, in: query, schema: { type: string } }
+        - { name: type, in: query, schema: { type: string, enum: [RECEIVE, SALE, SALE_REFUND, TRANSFER_OUT, TRANSFER_IN, ADJUSTMENT, STOCK_COUNT, ISSUE] } }
+        - { $ref: '#/components/parameters/page' }
+      responses:
+        '200': { description: items + total }
+    post:
+      tags: [Stock]
+      summary: عمليات المخزون — أدوار: ADMIN, PHARMACIST, INVENTORY_MANAGER
+      requestBody:
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - title: receive
+                  type: object
+                  properties:
+                    action: { type: string, enum: [receive] }
+                    productId: { type: string }
+                    branchId: { type: string }
+                    batchNo: { type: string }
+                    expiryDate: { type: string, format: date }
+                    qty: { type: integer }
+                    costPrice: { type: number }
+                - title: transfer
+                  type: object
+                  properties:
+                    action: { type: string, enum: [transfer] }
+                    fromBranchId: { type: string }
+                    toBranchId: { type: string }
+                    items:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          productId: { type: string }
+                          qty: { type: integer }
+                - title: adjust
+                  type: object
+                  properties:
+                    action: { type: string, enum: [adjust] }
+                    batchId: { type: string }
+                    newQty: { type: integer }
+                    note: { type: string }
+                - title: stockCount
+                  type: object
+                  properties:
+                    action: { type: string, enum: [stockCount] }
+                    branchId: { type: string }
+                    note: { type: string }
+                    items:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          batchId: { type: string }
+                          countedQty: { type: integer }
+      responses:
+        '200': { description: نجاح العملية }
+        '400': { description: مخزون غير كافٍ أو تشغيلة منتهية }
+
+  /invoices:
+    get:
+      tags: [Invoices]
+      summary: قائمة الفواتير مع فلاتر
+      parameters:
+        - { name: q, in: query, schema: { type: string }, description: رقم الفاتورة أو اسم العميل }
+        - { name: type, in: query, schema: { type: string, enum: [SALE, RETURN] } }
+        - { name: status, in: query, schema: { type: string } }
+        - { name: paymentMethod, in: query, schema: { type: string } }
+        - { name: dateFrom, in: query, schema: { type: string, format: date } }
+        - { name: dateTo, in: query, schema: { type: string, format: date } }
+        - { $ref: '#/components/parameters/page' }
+      responses:
+        '200': { description: items + total }
+    post:
+      tags: [Invoices]
+      summary: إتمام بيع (نقطة البيع) — أدوار: ADMIN, PHARMACIST, CASHIER
+      description: |
+        معاملة ذرية: خصم المخزون FEFO + بنود + حركات + ولاء + رصيد آجل +
+        ربط وصفة + إلغاء الفاتورة المعلقة + UUID للفاتورة الإلكترونية.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items, branchId]
+              properties:
+                items:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      productId: { type: string }
+                      qty: { type: integer }
+                      discount: { type: number }
+                customerId: { type: string, nullable: true }
+                paymentMethod: { type: string, enum: [CASH, VISA, WALLET, CREDIT, INSURANCE] }
+                invoiceDiscount: { type: number, default: 0 }
+                invoiceDiscountType: { type: string, enum: [FIXED, PERCENT], default: FIXED }
+                couponCode: { type: string }
+                redeemPoints: { type: integer, default: 0 }
+                branchId: { type: string }
+                prescriptionId: { type: string }
+                paid: { type: number }
+      responses:
+        '201': { description: فاتورة أُنشئت, content: { application/json: { schema: { $ref: '#/components/schemas/Invoice' } } } }
+        '400': { description: مخزون غير كافٍ / بيانات ناقصة }
+        '403': { description: "خصم يزيد عن حد الكاشير" }
+
+  /invoices/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Invoices]
+      summary: تفاصيل فاتورة للطباعة والمرتجعات
+      responses:
+        '200': { description: فاتورة + بنود + عميل + مستخدم + فرع + مرتجعاتها }
+
+  /invoices/{id}/refund:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [Invoices]
+      summary: مرتجع مرتبط بالفاتورة الأصلية — أدوار: ADMIN, PHARMACIST, ACCOUNTANT
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      invoiceItemId: { type: string }
+                      qty: { type: integer }
+                reason: { type: string }
+      responses:
+        '201': { description: فاتورة RETURN أُنشئت وتمت الاستعادة }
+
+  /invoices/hold:
+    get:
+      tags: [Invoices]
+      summary: الفواتير المعلقة
+      responses:
+        '200': { description: قائمة HELD }
+    post:
+      tags: [Invoices]
+      summary: تعليق سلة كفاتورة معلقة
+      responses:
+        '201': { description: أُنشئت HELD (بدون خصم مخزون) }
+    delete:
+      tags: [Invoices]
+      summary: حذف فاتورة معلقة (?id=)
+      parameters:
+        - { name: id, in: query, required: true, schema: { type: string } }
+      responses:
+        '200': { description: تم الاسترجاع }
+
+  /prescriptions:
+    get:
+      tags: [Prescriptions]
+      summary: قائمة الوصفات (status/q)
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [PENDING, PARTIAL, DISPENSED, CANCELLED] } }
+      responses:
+        '200': { description: وصفات مع بنودها }
+    post:
+      tags: [Prescriptions]
+      summary: تسجيل وصفة جديدة
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                customerId: { type: string }
+                doctorId: { type: string }
+                source: { type: string, enum: [MANUAL, IMAGE, OCR] }
+                notes: { type: string }
+                items:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      productId: { type: string }
+                      productName: { type: string }
+                      dosage: { type: string }
+                      qty: { type: integer }
+      responses:
+        '201': { description: RX-xxxx أُنشئت }
+    put:
+      tags: [Prescriptions]
+      summary: "صرف (action=dispense — يخصم FEFO) أو إلغاء (action=cancel)"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id: { type: string }
+                action: { type: string, enum: [dispense, cancel] }
+      responses:
+        '200': { description: تم }
+
+  /interactions/check:
+    post:
+      tags: [Prescriptions]
+      summary: فحص التداخلات الدوائية وحساسية العميل
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                productIds: { type: array, items: { type: string } }
+                customerId: { type: string }
+      responses:
+        '200':
+          description: تحذيرات
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  interactions:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        severity: { type: string, enum: [MINOR, MODERATE, MAJOR] }
+                        description: { type: string }
+                        ingredients: { type: string }
+                  allergies:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        ingredient: { type: string }
+                        product: { type: string }
+
+  /customers:
+    get:
+      tags: [Customers]
+      summary: قائمة العملاء
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+        - { name: type, in: query, schema: { type: string, enum: [NORMAL, VIP, INSURANCE] } }
+      responses:
+        '200': { description: items + total }
+    post:
+      tags: [Customers]
+      summary: إضافة عميل (تحقق من رقم الهاتف المصري)
+      responses:
+        '201': { description: أُنشئ }
+
+  /customers/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Customers]
+      summary: ملف عميل + فواتير + وصفات
+      responses:
+        '200': { description: كامل }
+    put:
+      tags: [Customers]
+      summary: تعديل عميل
+      responses:
+        '200': { description: مُعدّل }
+    delete:
+      tags: [Customers]
+      summary: حذف/تعطيل عميل — أدوار: ADMIN, ACCOUNTANT
+      responses:
+        '200': { description: تم }
+
+  /suppliers:
+    get:
+      tags: [Suppliers]
+      summary: قائمة الموردين
+      responses:
+        '200': { description: items }
+    post:
+      tags: [Suppliers]
+      summary: إضافة مورد
+      responses:
+        '201': { description: أُنشئ }
+    put:
+      tags: [Suppliers]
+      summary: تعديل مورد (id في الجسم)
+      responses:
+        '200': { description: مُعدّل }
+
+  /purchase-orders:
+    get:
+      tags: [Suppliers]
+      summary: أوامر الشراء (status)
+      responses:
+        '200': { description: items مع أصنافها }
+    post:
+      tags: [Suppliers]
+      summary: إنشاء أمر شراء (send=true للإرسال الفوري)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                supplierId: { type: string }
+                branchId: { type: string }
+                expectedAt: { type: string, format: date }
+                notes: { type: string }
+                send: { type: boolean }
+                items:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      productId: { type: string }
+                      qty: { type: integer }
+                      unitCost: { type: number }
+      responses:
+        '201': { description: PO-xxxx }
+    put:
+      tags: [Suppliers]
+      summary: إرسال أو إلغاء أمر (DRAFT→SENT أو CANCELLED)
+      responses:
+        '200': { description: تم }
+
+  /purchase-orders/{id}/receive:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [Suppliers]
+      summary: استلام بضاعة GRN — ينشئ التشغيلات ويرفع رصيد المورد
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                notes: { type: string }
+                lines:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      productId: { type: string }
+                      batchNo: { type: string }
+                      expiryDate: { type: string, format: date }
+                      qty: { type: integer }
+                      unitCost: { type: number }
+      responses:
+        '201': { description: GRN-xxxx }
+        '400': { description: تشغيلة منتهية أو بيانات ناقصة }
+
+  /finance:
+    get:
+      tags: [Finance]
+      summary: "الورديات/المصروفات/الكشوف — view=shifts|expenses|statement"
+      parameters:
+        - { name: view, in: query, schema: { type: string, enum: [shifts, expenses, statement] } }
+        - { name: type, in: query, schema: { type: string, enum: [customer, supplier] }, description: لعرض statement }
+        - { name: id, in: query, schema: { type: string } }
+      responses:
+        '200': { description: حسب العرض }
+    post:
+      tags: [Finance]
+      summary: "openShift / closeShift / addExpense"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  properties:
+                    action: { type: string, enum: [openShift] }
+                    openingBalance: { type: number }
+                - type: object
+                  properties:
+                    action: { type: string, enum: [closeShift] }
+                    shiftId: { type: string }
+                    closingBalance: { type: number }
+                    notes: { type: string }
+                - type: object
+                  properties:
+                    action: { type: string, enum: [addExpense] }
+                    type: { type: string, enum: [EXPENSE, INCOME] }
+                    category: { type: string }
+                    amount: { type: number }
+      responses:
+        '200': { description: تم }
+
+  /reports:
+    get:
+      tags: [Reports]
+      summary: التقارير الموحدة
+      parameters:
+        - name: type
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [sales-daily, sales-by-user, sales-by-branch, profit, inventory-low, inventory-expiring, slow-movers, vat, cashier-performance, top-products, top-customers]
+        - { name: dateFrom, in: query, schema: { type: string, format: date } }
+        - { name: dateTo, in: query, schema: { type: string, format: date } }
+        - { name: branchId, in: query, schema: { type: string } }
+      responses:
+        '200': { description: "rows + summary حسب نوع التقرير" }
+
+  /settings:
+    get:
+      tags: [Settings]
+      summary: الإعدادات العامة
+      responses:
+        '200': { description: صف الإعدادات }
+    put:
+      tags: [Settings]
+      summary: تحديث الإعدادات — أدوار: ADMIN, ACCOUNTANT (يحفظ نسخة للتراجع)
+      responses:
+        '200': { description: محدّثة }
+    post:
+      tags: [Settings]
+      summary: "rollback (تراجع لآخر نسخة) أو backup (نسخة يدوية) — ADMIN"
+      responses:
+        '200': { description: تم }
+
+  /branches:
+    get:
+      tags: [Settings]
+      summary: الفروع
+      responses:
+        '200': { description: items }
+    post:
+      tags: [Settings]
+      summary: إضافة فرع — ADMIN
+      responses:
+        '201': { description: أُنشئ }
+    put:
+      tags: [Settings]
+      summary: تعديل/تفعيل/تعيين رئيسي — ADMIN
+      responses:
+        '200': { description: تم }
+    delete:
+      tags: [Settings]
+      summary: تعطيل/حذف فرع (?id=) — ADMIN
+      responses:
+        '200': { description: تم }
+
+  /users:
+    get:
+      tags: [System]
+      summary: المستخدمون — ADMIN
+      responses:
+        '200': { description: items }
+    post:
+      tags: [System]
+      summary: إنشاء مستخدم (bcrypt + دور + PIN اختياري) — ADMIN
+      responses:
+        '201': { description: أُنشئ }
+    put:
+      tags: [System]
+      summary: تعديل مستخدم/كلمة مرور — ADMIN
+      responses:
+        '200': { description: مُعدّل }
+    delete:
+      tags: [System]
+      summary: تعطيل مستخدم (?id=) — ADMIN
+      responses:
+        '200': { description: تم }
+
+  /audit:
+    get:
+      tags: [System]
+      summary: سجل العمليات — ADMIN
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+        - { $ref: '#/components/parameters/page' }
+      responses:
+        '200': { description: items + total }
+
+  /notifications:
+    get:
+      tags: [System]
+      summary: الإشعارات (نواقص/صلاحية/وصفات/نسخ)
+      responses:
+        '200': { description: items + unread }
+    put:
+      tags: [System]
+      summary: تعليم الكل كمقروء
+      responses:
+        '200': { description: تم }
+
+  /hr:
+    get:
+      tags: [System]
+      summary: "HR — view=employees|attendance|payroll"
+      parameters:
+        - { name: view, in: query, schema: { type: string, enum: [employees, attendance, payroll] } }
+        - { name: month, in: query, schema: { type: string, example: "2026-11" } }
+      responses:
+        '200': { description: حسب العرض }
+    post:
+      tags: [System]
+      summary: "saveEmployee / checkIn / checkOut / payPayroll"
+      responses:
+        '200': { description: تم }
+
+  /master-data:
+    get:
+      tags: [System]
+      summary: البيانات الأساسية (شركات/مواد/أشكال/وحدات/خدمات/كوبونات)
+      responses:
+        '200': { description: الكل }
+    post:
+      tags: [System]
+      summary: "create/update/delete على كيان: {entity, op, data}"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                entity: { type: string, enum: [manufacturers, ingredients, forms, units, services, coupons] }
+                op: { type: string, enum: [create, update, delete] }
+                data: { type: object }
+      responses:
+        '200': { description: تم }
+        '400': { description: مستخدم في بيانات أخرى }
+
+  /doctors:
+    get:
+      tags: [Prescriptions]
+      summary: قائمة الأطباء
+      responses:
+        '200': { description: items }
+    post:
+      tags: [Prescriptions]
+      summary: إضافة طبيب
+      responses:
+        '201': { description: أُنشئ }
+    put:
+      tags: [Prescriptions]
+      summary: تعديل طبيب
+      responses:
+        '200': { description: مُعدّل }

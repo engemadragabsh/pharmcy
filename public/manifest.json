@@ -1,0 +1,19 @@
+{
+  "name": "صيدلية الشفاء — نظام إدارة الصيدليات",
+  "short_name": "صيدلية الشفاء",
+  "description": "نظام إدارة صيدليات متكامل مع نقطة بيع ومخزون وفواتير إلكترونية",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#059669",
+  "dir": "rtl",
+  "lang": "ar",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
