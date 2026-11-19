@@ -32,22 +32,76 @@ const CORE_TABLES = ["User", "Branch", "Settings", "Product"];
 
 const TAG = "[setup-db]";
 
-// ─── تحميل .env يدوياً عند التشغيل خارج Next (tsx CLI لا يقرأ .env) ───
+/** مسار قاعدة SQLite الافتراضي داخل المشروع */
+export function defaultDbUrl(): string {
+  return `file:${path.join(process.cwd(), "db", "custom.db")}`;
+}
+
+/**
+ * تحميل .env + تطبيعه — مع ضمان قابلية نقل المشروع لأي جهاز:
+ *  - لا يوجد .env أو DATABASE_URL؟      → يُنشأ .env ويشير إلى db/custom.db داخل المشروع
+ *  - المسار المُعد لا وجود له على هذا الجهاز؟ → يُعاد توجيهه إلى db/custom.db داخل المشروع
+ *    (هكذا تنتقل قاعدة البيانات المعبأة مع المشروع وتعمل فوراً بدون أي إعداد يدوي)
+ */
 function loadEnvFile(): void {
-  if (process.env.DATABASE_URL) return;
-  try {
-    const envPath = path.join(process.cwd(), ".env");
-    if (!fs.existsSync(envPath)) return;
-    for (const line of fs.readFileSync(envPath, "utf8").split(/\r?\n/)) {
-      const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/);
-      if (m && process.env[m[1]] === undefined) {
-        let v = m[2].trim();
-        if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) v = v.slice(1, -1);
-        process.env[m[1]] = v;
+  const envPath = path.join(process.cwd(), ".env");
+  const readEnv = (): Record<string, string> => {
+    const out: Record<string, string> = {};
+    try {
+      if (!fs.existsSync(envPath)) return out;
+      for (const line of fs.readFileSync(envPath, "utf8").split(/\r?\n/)) {
+        const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/);
+        if (m) {
+          let v = m[2].trim();
+          if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) v = v.slice(1, -1);
+          out[m[1]] = v;
+        }
       }
+    } catch { /* تجاهل — سنعتمد متغيرات البيئة الحالية */ }
+    return out;
+  };
+
+  const fileEnv = readEnv();
+  if (process.env.DATABASE_URL === undefined && fileEnv.DATABASE_URL) {
+    process.env.DATABASE_URL = fileEnv.DATABASE_URL;
+  }
+
+  // ─── التطبيع لجهوزية النقل (SQLite فقط) ───
+  const url = process.env.DATABASE_URL;
+  if (url && url.startsWith("file:")) {
+    const raw = url.slice("file:".length).split("?")[0].trim();
+    if (raw && raw !== ":memory:" && !path.isAbsolute(raw)) {
+      // مسار نسبي — نطلقه دائماً بالنسبة لجذر المشروع لتفادي اختلاف سياق التشغيل
+      process.env.DATABASE_URL = `file:${path.resolve(process.cwd(), raw)}`;
     }
-  } catch (e) {
-    console.warn(`${TAG} تعذر قراءة .env — سيُعتمد على متغيرات البيئة الحالية`);
+  }
+
+  const configuredPath = process.env.DATABASE_URL?.startsWith("file:")
+    ? process.env.DATABASE_URL.slice("file:".length).split("?")[0].trim()
+    : "";
+
+  if (!process.env.DATABASE_URL || (configuredPath && !fs.existsSync(configuredPath))) {
+    const fallback = defaultDbUrl();
+    const fallbackFile = fallback.slice("file:".length);
+    if (!configuredPath || !fs.existsSync(fallbackFile)) {
+      // لا يوجد إعداد صالح إطلاقاً — المشروع المنقول: ننشئ قاعدة جديدة داخل المشروع
+      process.env.DATABASE_URL = fallback;
+      try {
+        fs.writeFileSync(envPath, `DATABASE_URL=${fallback}\n`, "utf8");
+        console.log(`${TAG} 📝 تم إنشاء .env — DATABASE_URL=${fallback}`);
+      } catch { /* لا يمكن الكتابة — نكمل بمتغير البيئة للعملية الحالية */ }
+    } else {
+      // قاعدة المشروع المرفقة موجودة — نعيد التوجيه إليها (نقل قاعدة معبأة)
+      process.env.DATABASE_URL = fallback;
+      try {
+        const lines = fs.existsSync(envPath)
+          ? fs.readFileSync(envPath, "utf8").split(/\r?\n/).filter((l) => !/^\s*DATABASE_URL\s*=/.test(l) && l.trim() !== "")
+          : [];
+        lines.push(`DATABASE_URL=${fallback}`);
+        fs.writeFileSync(envPath, lines.join("\n") + "\n", "utf8");
+        console.log(`${TAG} 🔁 تم توجيه DATABASE_URL إلى قاعدة المشروع المرفقة: ${fallback}`);
+      } catch { /* نكمل بمتغير البيئة للعملية الحالية */ }
+    }
   }
 }
 

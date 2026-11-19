@@ -2,19 +2,36 @@
 
 دليل تشغيل النظام على بيئات الإنتاج. النظام Next.js 16 (App Router) + Prisma — يعمل على أي مزود يدعم Node.js 20+.
 
+**قاعدة البيانات الافتراضية: SQLite** (`db/custom.db` داخل المشروع) — النظام يُشحن بقاعدة معبأة وجاهزة، ويعتمد عليها بالكامل، ولا يحتاج أي خادم قواعد بيانات خارجي.
+
 ---
+
+## 0) تشغيل سريع — جاهز فوراً (SQLite مضمّنة)
+
+```bash
+npm install        # أو: bun install
+npm run dev        # يفتح على http://localhost:3000
+```
+
+هذا كل شيء — لا خطوة أخرى مطلوبة:
+- ملف `.env` يُنشأ تلقائياً ويشير إلى `db/custom.db` داخل المشروع (وإن نُقل المشروع لجهاز آخر يُصحَّح المسار تلقائياً عند أول إقلاع)
+- إن حُذفت القاعدة أو نُقلت نسخة جديدة بلا قاعدة: يُنشأ الملف + الجداول + بيانات البذر تلقائياً (Auto Bootstrap — آمن للتكرار)
+- بيانات الدخول الافتراضية: `admin / Admin@123` — `pharmacist / Pharma@123` — كاشير PIN `1234`
+
+للإنتاج على هذا الجهاز: `npm run build && npm run start`.
 
 ## 1) متغيرات البيئة
 
-أنشئ ملف `.env` (أو أضفها في لوحة المزود):
+النظام يعمل بدون أي متغيرات بيئة إلزامية (SQLite مضمنة + سر JWT افتراضي للتطوير). للتحكم اليدوي أو للإنتاج الموسّع:
 
 ```env
-# قاعدة البيانات — الإنتاج: PostgreSQL
-DATABASE_URL="postgresql://user:password@host:5432/pharmacy?schema=public"
-# أو SQLite للفروع الصغيرة:
-# DATABASE_URL="file:/data/pharmacy.db"
+# قاعدة البيانات — الافتراضي المضمّن: SQLite داخل المشروع (يُنشأ تلقائياً)
+DATABASE_URL="file:/absolute/path/to/db/custom.db"
 
-# سر JWT — استبدله بقيمة عشوائية قوية (64 حرفاً)
+# لترقية لاحقة إلى PostgreSQL (عدة فروع / حمل عالٍ):
+# DATABASE_URL="postgresql://user:password@host:5432/pharmacy?schema=public"
+
+# سر JWT — استبدله بقيمة عشوائية قوية (64 حرفاً) في الإنتاج
 JWT_SECRET="GENERATE-WITH: openssl rand -hex 32"
 
 # البيئة
