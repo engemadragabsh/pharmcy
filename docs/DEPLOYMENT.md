@@ -29,17 +29,25 @@ NODE_ENV=production
 # التبعيات
 bun install        # أو: npm ci
 
-# توليد عميل Prisma + دفع المخطط
+# توليد عميل Prisma (التهيئة الكاملة تجري تلقائياً عند الإقلاع)
 bun run db:generate
-bun run db:push
-
-# البيانات الأولية (مرة واحدة — اختيارية للإنتاج)
-bun run scripts/seed.ts
 
 # البناء والتشغيل (Standalone)
 bun run build
-bun run start      # يعمل على PORT=3000 افتراضياً
+bun run start      # prestart يُنفّذ setup:db تلقائياً: قاعدة → جداول → بذر إن كانت فارغة
 ```
+
+### التهيئة التلقائية (Auto Database Bootstrap)
+
+لا حاجة لأي أمر قاعدة بيانات يدوي — عند كل إقلاع يعمل `npm run setup:db` (عبر `prestart`/`predev` وعبر `src/instrumentation.ts`) وهو آمن للتكرار تماماً:
+
+1. **إنشاء القاعدة** — SQLite: إنشاء الملف والمجلد تلقائياً؛ مزودون مُدارون (Neon/Supabase/PlanetScale): تخطٍ بصمت بافتراض وجود القاعدة
+2. **الجداول** — `prisma migrate deploy` إن وُجدت migrations وإلا `prisma db push --skip-generate`
+3. **البذر** — فقط إذا كان جدول `User` فارغاً (لا يُعدّل ولا يكرر أي بيانات موجودة؛ upsert كطبقة أمان داخل `prisma/seed.ts`)
+
+كل خطوة داخل try/catch — أي فشل يُسجل تحذيراً ولا يمنع إقلاع التطبيق.
+
+> للبيانات الأولية اليدوية: `npm run setup:db` (آمنة). لإعادة التعيين الكاملة في التطوير: `npm run seed:reset` (⚠️ تحذف كل البيانات).
 
 سكربت `build` ينتج `.next/standalone` جاهزاً للتشغيل بـ `node .next/standalone/server.js`.
 
