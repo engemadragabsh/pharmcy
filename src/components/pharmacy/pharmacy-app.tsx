@@ -18,6 +18,7 @@ import SuppliersScreen from "./suppliers-screen";
 import FinanceScreen from "./finance-screen";
 import HRScreen from "./hr-screen";
 import ReportsScreen from "./reports-screen";
+import BranchesScreen from "./branches-screen";
 import SettingsScreen from "./settings-screen";
 import { ShieldAlert } from "lucide-react";
 
@@ -46,6 +47,7 @@ export default function PharmacyApp() {
     finance: <FinanceScreen />,
     hr: <HRScreen />,
     reports: <ReportsScreen />,
+    branches: <BranchesScreen />,
     settings: <SettingsScreen />,
   };
 

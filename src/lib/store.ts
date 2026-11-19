@@ -129,6 +129,7 @@ export const PERMS: Record<string, SessionUser["role"][]> = {
   finance: ["ADMIN", "ACCOUNTANT", "CASHIER"],
   hr: ["ADMIN", "ACCOUNTANT"],
   reports: ["ADMIN", "PHARMACIST", "ACCOUNTANT", "INVENTORY_MANAGER"],
+  branches: ["ADMIN", "INVENTORY_MANAGER"],
   settings: ["ADMIN"],
 };
 

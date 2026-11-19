@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
   try {
     await requireAuth(req);
     const items = await db.branch.findMany({
-      include: { _count: { select: { users: true, batches: true } } },
+      include: { _count: { select: { users: true, batches: true, invoices: true, warehouses: true } } },
       orderBy: { isDefault: "desc" },
     });
     return NextResponse.json({ items });

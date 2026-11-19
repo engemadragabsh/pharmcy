@@ -34,6 +34,7 @@ const NAV = [
   { key: "finance", icon: Wallet },
   { key: "hr", icon: UserRound },
   { key: "reports", icon: BarChart3 },
+  { key: "branches", icon: Network },
   { key: "settings", icon: SettingsIcon },
 ];
 

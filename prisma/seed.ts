@@ -101,6 +101,23 @@ export async function seedDatabase(db: TxClient) {
     create: { code: "BR02", name: "فرع مدينة نصر", nameEn: "Nasr City Branch", address: "شارع عباس العقاد، مدينة نصر", phone: "0224045566" },
   });
 
+  console.log("🏭 المخازن...");
+  await db.warehouse.upsert({
+    where: { code: "WH01" },
+    update: {},
+    create: { code: "WH01", name: "المستودع الرئيسي", nameEn: "Main Warehouse", branchId: brMain.id, location: "بدء فرع المعادي", phone: "0225216790", manager: "مصطفى كامل", isMain: true },
+  });
+  await db.warehouse.upsert({
+    where: { code: "WH02" },
+    update: {},
+    create: { code: "WH02", name: "مستودع مدينة نصر", nameEn: "Nasr City Depot", branchId: brNasr.id, location: "شارع عباس العقاد", phone: "0224045567", manager: "هاني عادل" },
+  });
+  await db.warehouse.upsert({
+    where: { code: "WH03" },
+    update: {},
+    create: { code: "WH03", name: "مستودع الحجر الصحي", nameEn: "Quarantine Store", branchId: null, location: "المنطقة الصناعية، العبور", phone: "0264611000", manager: "أحمد فتحي", notes: "الأصناف الموقوفة أو قيد الفحص" },
+  });
+
   console.log("👥 المستخدمون (5 أدوار)...");
   const hash = (p: string) => bcrypt.hashSync(p, 10);
   const uAdmin = await db.user.upsert({

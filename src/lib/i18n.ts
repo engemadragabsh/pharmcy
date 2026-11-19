@@ -541,6 +541,41 @@ export const dict: Record<string, { ar: string; en: string }> = {
 
   // ─── أدوار الوصول ───
   "perm.denied": { ar: "لا تملك صلاحية الوصول لهذه الشاشة", en: "You don't have permission to access this screen" },
+
+  // ─── الفروع والمخازن ───
+  "nav.branches": { ar: "الفروع والمخازن", en: "Branches & Warehouses" },
+  "br.title": { ar: "إدارة الفروع والمخازن", en: "Branches & Warehouses" },
+  "br.subtitle": { ar: "إدارة فروع الصيدلية ومستودعات التخزين وربطها ببعضها", en: "Manage pharmacy branches and storage warehouses" },
+  "br.tab.branches": { ar: "الفروع", en: "Branches" },
+  "br.tab.warehouses": { ar: "المخازن", en: "Warehouses" },
+  "br.addBranch": { ar: "إضافة فرع", en: "Add Branch" },
+  "br.addWarehouse": { ar: "إضافة مخزن", en: "Add Warehouse" },
+  "br.editBranch": { ar: "تعديل الفرع", en: "Edit Branch" },
+  "br.editWarehouse": { ar: "تعديل المخزن", en: "Edit Warehouse" },
+  "br.name": { ar: "الاسم (عربي)", en: "Name (Arabic)" },
+  "br.nameEn": { ar: "الاسم (إنجليزي)", en: "Name (English)" },
+  "br.branch": { ar: "الفرع", en: "Branch" },
+  "br.warehouse": { ar: "المخزن", en: "Warehouse" },
+  "br.branchLink": { ar: "الفرع التابع له", en: "Linked Branch" },
+  "br.noBranch": { ar: "مخزن مركزي مستقل", en: "Standalone central" },
+  "br.location": { ar: "الموقع", en: "Location" },
+  "br.manager": { ar: "المدير المسؤول", en: "Manager" },
+  "br.isDefault": { ar: "الفرع الرئيسي", en: "Main Branch" },
+  "br.isDefaultHint": { ar: "تعيين كفرع افتراضي عند بدء العمل", en: "Set as default branch on startup" },
+  "br.isMain": { ar: "المخزن الرئيسي", en: "Main Warehouse" },
+  "br.active": { ar: "نشط", en: "Active" },
+  "br.inactive": { ar: "موقوف", en: "Inactive" },
+  "br.users": { ar: "المستخدمون", en: "Users" },
+  "br.invoices": { ar: "الفواتير", en: "Invoices" },
+  "br.batches": { ar: "التشغيلات", en: "Batches" },
+  "br.qty": { ar: "إجمالي الكميات", en: "Total Qty" },
+  "br.warehousesCount": { ar: "المخازن", en: "Warehouses" },
+  "br.statBranches": { ar: "فروع مسجلة", en: "Registered Branches" },
+  "br.statActive": { ar: "فروع نشطة", en: "Active Branches" },
+  "br.statWarehouses": { ar: "مخازن التخزين", en: "Storage Warehouses" },
+  "br.statLinked": { ar: "مخازن مرتبطة بفرع", en: "Branch-linked" },
+  "br.readOnlyHint": { ar: "العرض فقط — إدارة الفروع والمخازن متاحة لمدير النظام", en: "Read-only — branch & warehouse management is admin-only" },
+  "br.unlink": { ar: "إلغاء الربط", en: "Unlink" },
 };
 
 export function translate(key: string, lang: Lang): string {

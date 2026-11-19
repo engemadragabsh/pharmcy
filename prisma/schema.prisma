@@ -151,6 +151,28 @@ model Branch {
   purchaseOrders PurchaseOrder[]
   goodsReceipts  GoodsReceipt[]
   stockCounts    StockCount[]
+  warehouses     Warehouse[]    @relation("branchWarehouses")
+}
+
+/// المخازن والمستودعات — مرتبطة بفرع أو مخزن مركزي مستقل
+model Warehouse {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  nameEn    String
+  branchId  String?
+  branch    Branch?  @relation("branchWarehouses", fields: [branchId], references: [id], onDelete: SetNull)
+  location  String?
+  phone     String?
+  manager   String?
+  isMain    Boolean  @default(false)
+  isActive  Boolean  @default(true)
+  notes     String?
+  createdAt DateTime @default(now())
+
+  batches Batch[]
+
+  @@index([branchId])
 }
 
 // ══════════════════════════ CATALOG ══════════════════════════
@@ -237,6 +259,8 @@ model Batch {
   product       Product  @relation(fields: [productId], references: [id])
   branchId      String
   branch        Branch   @relation(fields: [branchId], references: [id])
+  warehouseId   String?
+  warehouse     Warehouse? @relation(fields: [warehouseId], references: [id])
   batchNo       String
   expiryDate    DateTime
   quantity      Int      @default(0)
@@ -246,6 +270,8 @@ model Batch {
 
   invoiceItems   InvoiceItem[]
   stockMovements StockMovement[]
+
+  @@index([warehouseId])
 }
 
 model DrugInteraction {
