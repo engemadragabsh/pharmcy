@@ -43,14 +43,22 @@ export async function GET(req: NextRequest) {
       db.product.count({ where }),
     ]);
 
+    const includeBatches = searchParams.get("includeBatches") === "1";
+    const now = new Date();
+
     return NextResponse.json({
       items: items.map((p) => {
         const stock = p.batches.reduce((s, b) => s + b.quantity, 0);
+        const base = { ...p, stock, margin: p.sellPrice > 0 ? Math.round(((p.sellPrice - p.purchasePrice) / p.sellPrice) * 100) : 0 };
+        if (!includeBatches) return { ...base, batches: undefined };
+        // للملصقات: الدفعات الصالحة فقط (غير منتهية) مرتبة بالأقرب انتهاءً
+        const valid = p.batches
+          .filter((b) => new Date(b.expiryDate) > now)
+          .sort((a, b) => new Date(a.expiryDate).getTime() - new Date(b.expiryDate).getTime());
         return {
-          ...p,
-          stock,
-          margin: p.sellPrice > 0 ? Math.round(((p.sellPrice - p.purchasePrice) / p.sellPrice) * 100) : 0,
-          batches: undefined,
+          ...base,
+          earliestExpiry: valid[0]?.expiryDate ?? null,
+          batches: valid.map((b) => ({ expiryDate: b.expiryDate, quantity: b.quantity, branchId: b.branchId })),
         };
       }),
       total,

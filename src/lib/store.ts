@@ -121,6 +121,7 @@ export const PERMS: Record<string, SessionUser["role"][]> = {
   dashboard: ["ADMIN", "PHARMACIST", "CASHIER", "ACCOUNTANT", "INVENTORY_MANAGER"],
   pos: ["ADMIN", "PHARMACIST", "CASHIER"],
   products: ["ADMIN", "PHARMACIST", "INVENTORY_MANAGER", "CASHIER"],
+  labels: ["ADMIN", "PHARMACIST", "INVENTORY_MANAGER"],
   inventory: ["ADMIN", "PHARMACIST", "INVENTORY_MANAGER"],
   prescriptions: ["ADMIN", "PHARMACIST", "CASHIER"],
   customers: ["ADMIN", "PHARMACIST", "CASHIER", "ACCOUNTANT"],

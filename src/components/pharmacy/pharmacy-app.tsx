@@ -10,6 +10,7 @@ import AppShell from "./app-shell";
 import DashboardScreen from "./dashboard-screen";
 import POSScreen from "./pos-screen";
 import ProductsScreen from "./products-screen";
+import LabelsScreen from "./labels-screen";
 import InventoryScreen from "./inventory-screen";
 import PrescriptionsScreen from "./prescriptions-screen";
 import CustomersScreen from "./customers-screen";
@@ -37,6 +38,7 @@ export default function PharmacyApp() {
     dashboard: <DashboardScreen onNavigate={navigate} />,
     pos: <POSScreen />,
     products: <ProductsScreen />,
+    labels: <LabelsScreen />,
     inventory: <InventoryScreen />,
     prescriptions: <PrescriptionsScreen />,
     customers: <CustomersScreen />,

@@ -212,6 +212,7 @@ paths:
         - { name: q, in: query, schema: { type: string } }
         - { name: category, in: query, schema: { type: string, enum: [RX, OTC, MEDICAL_SUPPLY, COSMETIC, FOOD] } }
         - { name: active, in: query, schema: { type: string, enum: ["true", "false"] } }
+        - { name: includeBatches, in: query, description: "عند 1: يرجع الدفعات الصالحة وأقرب تاريخ انتهاء (لملصقات الباركود)", schema: { type: string, enum: ["0", "1"] } }
         - { $ref: '#/components/parameters/page' }
         - { $ref: '#/components/parameters/limit' }
       responses:

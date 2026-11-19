@@ -148,6 +148,58 @@ body {
   font-family: "Cairo", "Segoe UI", Tahoma, "Noto Sans Arabic", system-ui, sans-serif;
 }
 
+/* ═══════════ ملصقات الباركود 38×25 مم — قياسية ═══════════ */
+.label-38x25 {
+  width: 38mm;
+  height: 25mm;
+  padding: 1mm 1.2mm;
+  border: 0.25mm solid #cbd5e1;
+  border-radius: 1mm;
+  font-family: "Cairo", Tahoma, "Noto Sans Arabic", Arial, sans-serif;
+  line-height: 1.15;
+  flex-shrink: 0;
+}
+.l-ph {
+  font-size: 5.5pt;
+  font-weight: 700;
+  text-align: center;
+  border-bottom: 0.15mm solid #000;
+  padding-bottom: 0.4mm;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.l-name {
+  font-size: 6.2pt;
+  font-weight: 700;
+  text-align: center;
+  line-height: 1.2;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  max-height: 5.3mm;
+}
+.l-exp { font-size: 5.2pt; white-space: nowrap; }
+.l-price { font-size: 7pt; font-weight: 800; white-space: nowrap; }
+.l-code {
+  font-size: 4.6pt;
+  line-height: 1;
+  letter-spacing: 0.3px;
+  text-align: center;
+  white-space: nowrap;
+  max-width: 36mm;
+}
+
+/* منطقة طباعة الملصقات — خارج الشاشة في العرض العادي */
+.labels-print-root {
+  position: fixed;
+  left: -10000px;
+  top: 0;
+  width: 38mm;
+  background: #fff;
+}
+
 /* ═══════════ الطباعة — حراري 80mm و A4 ═══════════ */
 @media print {
   body * { visibility: hidden !important; }
@@ -167,6 +219,53 @@ body {
   .print-thermal { width: 72mm !important; font-family: "Courier New", monospace !important; }
   .print-a4 { width: 190mm !important; }
   @page { margin: 0; }
+
+  /* ─── ملصقات الباركود ─── */
+  /* عند وجود منطقة طباعة الملصقات: إخفاء كل ما عداها من التدفق (لا صفحات فارغة) */
+  body.has-labels-print > *:not(.labels-print-root) { display: none !important; }
+  .print-area.print-labels {
+    position: static !important;
+    inset: auto !important;
+    left: auto !important;
+    width: auto !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+    background: white !important;
+    color: black !important;
+    box-shadow: none !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+  .labels-strip { display: block !important; }
+  /* ورقة A4: شبكة متلاصقة مطابقة لورق الملصقات القياسي 55 خانة (5×11) */
+  .labels-sheet {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    align-content: flex-start !important;
+    gap: 0 !important;
+    direction: ltr !important;
+  }
+  .print-labels .label-38x25 {
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    background: white !important;
+    color: black !important;
+    break-inside: avoid !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .labels-sheet .label-38x25 { border: 0.2mm dotted #999 !important; }
+  /* طابعة الملصقات: ملصق واحد في كل صفحة/لاصقة */
+  .labels-strip .label-38x25 {
+    break-after: page !important;
+    page-break-after: always !important;
+  }
+  .labels-strip .label-38x25:last-child {
+    break-after: auto !important;
+    page-break-after: auto !important;
+  }
 }
 
 /* شريط تمرير أنيق */

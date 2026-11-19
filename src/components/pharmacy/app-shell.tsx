@@ -16,7 +16,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { toast } from "sonner";
 import {
   LayoutDashboard, ScanBarcode, Pill, Warehouse, FileText, Users, Truck,
-  Wallet, Settings as SettingsIcon, BarChart3, Pill as PillIcon,
+  Wallet, Settings as SettingsIcon, BarChart3, Pill as PillIcon, Barcode,
   Bell, Languages, Moon, Sun, LogOut, Menu, Building2, UserRound, ChevronDown, Network,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -26,6 +26,7 @@ const NAV = [
   { key: "dashboard", icon: LayoutDashboard },
   { key: "pos", icon: ScanBarcode },
   { key: "products", icon: Pill },
+  { key: "labels", icon: Barcode },
   { key: "inventory", icon: Warehouse },
   { key: "prescriptions", icon: FileText },
   { key: "customers", icon: Users },
