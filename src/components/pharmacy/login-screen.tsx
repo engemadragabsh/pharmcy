@@ -21,14 +21,6 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const DEMO_ACCOUNTS: Array<{ username: string; password: string; roleKey: string }> = [
-  { username: "admin", password: "Admin@123", roleKey: "role.ADMIN" },
-  { username: "pharmacist", password: "Pharma@123", roleKey: "role.PHARMACIST" },
-  { username: "cashier", password: "Cashier@123", roleKey: "role.CASHIER" },
-  { username: "accountant", password: "Account@123", roleKey: "role.ACCOUNTANT" },
-  { username: "inventory", password: "Inv@123", roleKey: "role.INVENTORY_MANAGER" },
-];
-
 export default function LoginScreen() {
   useDirection();
   const { t, lang, setLang } = useI18n();
@@ -168,7 +160,7 @@ export default function LoginScreen() {
               <form onSubmit={handlePasswordLogin} className="space-y-4">
                 <div>
                   <Label htmlFor="username">{t("auth.username")}</Label>
-                  <Input id="username" dir="ltr" className="mt-1.5" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="admin" autoComplete="username" required />
+                  <Input id="username" dir="ltr" className="mt-1.5" value={username} onChange={(e) => setUsername(e.target.value)} placeholder={lang === "AR" ? "اسم المستخدم" : "Username"} autoComplete="username" required />
                 </div>
                 <div>
                   <Label htmlFor="password">{t("auth.password")}</Label>
@@ -222,33 +214,8 @@ export default function LoginScreen() {
                 <Button type="submit" className="w-full" disabled={pin.length !== 4 || pinLoading}>
                   {pinLoading ? t("app.loading") : t("auth.login")}
                 </Button>
-                <p className="text-xs text-center text-muted-foreground">PIN الكاشير التجريبي: 1234</p>
               </form>
             )}
-
-            {/* حسابات تجريبية */}
-            <div className="mt-6 pt-4 border-t">
-              <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1">
-                <ShieldCheck className="h-3.5 w-3.5" /> {t("auth.accountsHint")}
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {DEMO_ACCOUNTS.map((acc) => (
-                  <button
-                    key={acc.username}
-                    type="button"
-                    onClick={() => {
-                      setMode("password");
-                      setUsername(acc.username);
-                      setPassword(acc.password);
-                    }}
-                  >
-                    <Badge variant="secondary" className="cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors">
-                      {t(acc.roleKey)}
-                    </Badge>
-                  </button>
-                ))}
-              </div>
-            </div>
           </CardContent>
         </Card>
       </div>

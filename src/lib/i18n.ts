@@ -61,7 +61,6 @@ export const dict: Record<string, { ar: string; en: string }> = {
   "auth.forgotHint": { ar: "راجع مدير النظام لإعادة تعيين كلمة المرور", en: "Contact system administrator to reset password" },
   "auth.pinLogin": { ar: "دخول سريع بـ PIN", en: "Quick PIN Login" },
   "auth.pin": { ar: "رمز PIN (4 أرقام)", en: "PIN Code (4 digits)" },
-  "auth.accountsHint": { ar: "حسابات تجريبية — انقر لتعبئة", en: "Demo accounts — click to fill" },
   "auth.selectBranch": { ar: "اختيار الفرع", en: "Select Branch" },
   "auth.selectBranchHint": { ar: "اختر الفرع/المستودع الذي ستعمل منه", en: "Choose the branch/warehouse you'll work from" },
   "auth.continue": { ar: "متابعة", en: "Continue" },
