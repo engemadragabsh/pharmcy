@@ -18,6 +18,10 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
@@ -26,6 +30,7 @@ import {
   Settings as SettingsIcon, Store, Building2, Users, FileText, ScanBarcode,
   Package, Bell, DatabaseBackup, Plug, Palette, Library, ScrollText, Plus,
   Trash2, History, EyeOff, Eye, Save, RotateCcw, ShieldCheck, Lock,
+  Download, HardDriveDownload,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -51,7 +56,26 @@ export default function SettingsScreen() {
   const [auditTotal, setAuditTotal] = useState(0);
   const [showPins, setShowPins] = useState(false);
 
+  // النسخ الاحتياطي والاستعادة
+  const [backups, setBackups] = useState<any[]>([]);
+  const [bkSummary, setBkSummary] = useState<{ count: number; totalBytes: number; dir: string } | null>(null);
+  const [bkBusy, setBkBusy] = useState(false);
+  const [confirmRestore, setConfirmRestore] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+
   const fmtQ = (n: number) => fmtNum(n, lang);
+
+  // ─── النسخ الاحتياطي: قائمة / استعادة / تنزيل / حذف ───
+  const loadBackups = useCallback(async () => {
+    try {
+      const b = await api("/settings/backup");
+      setBackups(b.items || []);
+      setBkSummary({ count: b.count, totalBytes: b.totalBytes, dir: b.dir });
+    } catch {}
+  }, []);
+
+  const fmtSize = (bytes: number) =>
+    bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
 
   const loadAll = useCallback(async () => {
     try {
@@ -76,6 +100,7 @@ export default function SettingsScreen() {
       setAuditLogs(a.items || []);
       setAuditTotal(a.total || 0);
     } catch {}
+    await loadBackups();
      
   }, []);
 
@@ -165,15 +190,68 @@ export default function SettingsScreen() {
   };
 
   const runBackup = async () => {
+    setBkBusy(true);
     try {
-      await api("/settings", { method: "POST", body: { action: "backup" } });
-      toast.success(t("app.success") + " ✓");
+      const r = await api("/settings/backup", { method: "POST" });
+      toast.success(`${t("set.bk.done")} — ${r.name}`);
+      await loadBackups();
       const st = await api("/settings");
       setS(st);
       setSettings(st);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : t("app.error"));
     }
+    setBkBusy(false);
+  };
+
+  const downloadBackup = async (name: string) => {
+    try {
+      const token = useApp.getState().auth?.token;
+      const res = await fetch(`/api/settings/backup?download=${encodeURIComponent(name)}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error("download failed");
+      const blob = await res.blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = name;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      toast.success(t("set.bk.downloadDone") + " ✓");
+    } catch {
+      toast.error(t("app.error"));
+    }
+  };
+
+  const doRestore = async () => {
+    if (!confirmRestore) return;
+    setBkBusy(true);
+    try {
+      const r = await api("/settings/restore", { method: "POST", body: { name: confirmRestore } });
+      toast.success(`${t("set.bk.restoreDone")} ✓ (${r.restoredCount} ${lang === "AR" ? "جدول" : "tables"})`);
+      if (r.skippedCount > 0) {
+        toast.warning(`${r.skippedCount} ${lang === "AR" ? "جدول تم تخطيه (اختلاف المخطط)" : "tables skipped (schema drift)"}`);
+      }
+      setConfirmRestore(null);
+      await loadAll();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : t("app.error"));
+    }
+    setBkBusy(false);
+  };
+
+  const doDeleteBackup = async () => {
+    if (!confirmDelete) return;
+    setBkBusy(true);
+    try {
+      await api(`/settings/backup?name=${encodeURIComponent(confirmDelete)}`, { method: "DELETE" });
+      toast.success(t("app.delete") + " ✓");
+      setConfirmDelete(null);
+      await loadBackups();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : t("app.error"));
+    }
+    setBkBusy(false);
   };
 
   const rollback = async () => {
@@ -487,7 +565,7 @@ export default function SettingsScreen() {
         </TabsContent>
 
         {/* ─── النسخ الاحتياطي ─── */}
-        <TabsContent value="backup">
+        <TabsContent value="backup" className="space-y-4">
           <Card><CardContent className="p-4 space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
@@ -518,13 +596,107 @@ export default function SettingsScreen() {
                 <p className="text-sm font-semibold">{t("set.lastBackup")}</p>
                 <p className="text-xs text-muted-foreground">{s?.lastBackupAt ? fmtDate(s.lastBackupAt, lang, true) : "—"}</p>
               </div>
-              <Button onClick={runBackup} className="gap-2"><DatabaseBackup className="h-4 w-4" /> {t("set.runBackup")}</Button>
+              <Button onClick={runBackup} disabled={bkBusy} className="gap-2"><DatabaseBackup className="h-4 w-4" /> {t("set.runBackup")}</Button>
             </div>
+            {bkSummary && (
+              <div className="grid grid-cols-3 gap-2">
+                <div className="p-2.5 rounded-lg border text-center">
+                  <p className="text-lg font-bold">{fmtQ(bkSummary.count)}</p>
+                  <p className="text-[11px] text-muted-foreground">{t("set.bk.count")}</p>
+                </div>
+                <div className="p-2.5 rounded-lg border text-center">
+                  <p className="text-lg font-bold">{fmtSize(bkSummary.totalBytes)}</p>
+                  <p className="text-[11px] text-muted-foreground">{t("set.bk.totalSize")}</p>
+                </div>
+                <div className="p-2.5 rounded-lg border text-center">
+                  <p className="text-[11px] font-mono break-all" dir="ltr">{bkSummary.dir}</p>
+                  <p className="text-[11px] text-muted-foreground">{t("set.bk.dir")}</p>
+                </div>
+              </div>
+            )}
             <p className="text-xs text-muted-foreground flex items-center gap-1.5">
               <History className="h-3.5 w-3.5" />
               {lang === "AR" ? "كل تعديل للإعدادات يُحفظ نسخة منه تلقائياً — يمكنك التراجع من زر «التراجع لآخر إعداد» أعلى الشاشة." : "Every settings change is snapshotted — use Rollback above to revert."}
             </p>
           </CardContent></Card>
+
+          {/* قائمة النسخ المحفوظة */}
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><HardDriveDownload className="h-4 w-4 text-primary" /> {t("set.bk.list")}</CardTitle></CardHeader>
+            <CardContent>
+              {backups.length === 0 ? (
+                <EmptyState icon={DatabaseBackup} message={t("set.bk.empty")} />
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>{t("set.bk.name")}</TableHead>
+                      <TableHead className="w-24">{t("set.bk.size")}</TableHead>
+                      <TableHead className="w-44">{t("set.bk.date")}</TableHead>
+                      <TableHead className="w-56 text-end">{t("set.bk.actions")}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {backups.map((b) => (
+                      <TableRow key={b.name}>
+                        <TableCell className="font-mono text-xs" dir="ltr">{b.name}</TableCell>
+                        <TableCell className="text-xs">{fmtSize(b.sizeBytes)}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{fmtDate(b.createdAt, lang, true)}</TableCell>
+                        <TableCell className="text-end">
+                          <div className="flex justify-end gap-1.5">
+                            <Button size="sm" variant="default" disabled={bkBusy} onClick={() => setConfirmRestore(b.name)} className="gap-1 h-8">
+                              <History className="h-3.5 w-3.5" /> {t("set.bk.restore")}
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => downloadBackup(b.name)} className="gap-1 h-8">
+                              <Download className="h-3.5 w-3.5" /> {t("set.bk.download")}
+                            </Button>
+                            <Button size="sm" variant="outline" disabled={bkBusy} onClick={() => setConfirmDelete(b.name)} className="gap-1 h-8 text-destructive hover:text-destructive">
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* تأكيد الاستعادة */}
+          <AlertDialog open={!!confirmRestore} onOpenChange={(o) => !o && setConfirmRestore(null)}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle className="flex items-center gap-2"><History className="h-5 w-5 text-amber-500" /> {t("set.bk.restoreTitle")}</AlertDialogTitle>
+                <AlertDialogDescription>
+                  <span className="block font-mono text-xs" dir="ltr">{confirmRestore}</span>
+                  {t("set.bk.restoreDesc")}
+                  <span className="block mt-2 flex items-center gap-1.5 text-emerald-600 font-medium"><ShieldCheck className="h-3.5 w-3.5" /> {t("set.bk.restoreNoRestart")}</span>
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>{t("app.cancel")}</AlertDialogCancel>
+                <AlertDialogAction onClick={doRestore} disabled={bkBusy}>{t("set.bk.restore")}</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          {/* تأكيد الحذف */}
+          <AlertDialog open={!!confirmDelete} onOpenChange={(o) => !o && setConfirmDelete(null)}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle className="flex items-center gap-2"><Trash2 className="h-5 w-5 text-destructive" /> {t("set.bk.deleteTitle")}</AlertDialogTitle>
+                <AlertDialogDescription>
+                  <span className="block font-mono text-xs" dir="ltr">{confirmDelete}</span>
+                  {t("set.bk.deleteDesc")}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>{t("app.cancel")}</AlertDialogCancel>
+                <AlertDialogAction onClick={doDeleteBackup} disabled={bkBusy} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">{t("app.delete")}</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </TabsContent>
 
         {/* ─── التكاملات ─── */}
