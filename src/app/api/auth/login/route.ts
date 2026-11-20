@@ -26,11 +26,14 @@ export async function POST(req: NextRequest) {
     const { username, password } = body ?? {};
     if (!username || !password) throw new ApiError(400, "أدخل اسم المستخدم وكلمة المرور");
 
-    const user = await db.user.findUnique({ where: { username: String(username).trim() } });
-    if (!user || !user.isActive) throw new ApiError(401, "اسم المستخدم أو كلمة المرور غير صحيحة");
+    // اسم المستخدم غير حساس لحالة الأحرف (Admin = admin = ADMIN) — كلمة المرور حساسة
+    const uname = String(username).trim();
+    const user = (await db.user.findUnique({ where: { username: uname } }))
+      ?? (uname !== uname.toLowerCase() ? await db.user.findFirst({ where: { username: uname.toLowerCase() } }) : null);
+    if (!user || !user.isActive) throw new ApiError(401, "اسم المستخدم أو كلمة المرور غير صحيحة — انتبه: كلمة المرور حساسة لحالة الأحرف (حروف كبيرة/صغيرة)");
 
     const ok = await bcrypt.compare(String(password), user.passwordHash);
-    if (!ok) throw new ApiError(401, "اسم المستخدم أو كلمة المرور غير صحيحة");
+    if (!ok) throw new ApiError(401, "اسم المستخدم أو كلمة المرور غير صحيحة — انتبه: كلمة المرور حساسة لحالة الأحرف (حروف كبيرة/صغيرة)");
 
     await db.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
 

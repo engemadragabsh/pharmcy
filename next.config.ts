@@ -7,6 +7,8 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   reactStrictMode: false,
+  // إخفاء شارة أدوات المطوّر العائمة (مثل "1 issue") — لا داعي لظهورها للمستخدم
+  devIndicators: false,
 };
 
 export default nextConfig;
