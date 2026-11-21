@@ -63,3 +63,4 @@ server.log
 /tests/
 /.zscripts/
 /Caddyfile
+tool-results/
