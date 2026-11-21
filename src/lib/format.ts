@@ -3,6 +3,22 @@
  */
 import { Lang } from "./i18n";
 
+/**
+ * توحيد اسم الصنف لمقارنة التكرار:
+ * إزالة المسافات الزائدة + توحيد الهمزات (أإآ→ا) والتاء المربوطة (ة→ه) والألف المقصورة (ى→ي)
+ * وإزالة التطويل + تجاهل حالة الأحرف اللاتينية
+ */
+export function normalizeName(s: string): string {
+  return String(s || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/[أإآ]/g, "ا")
+    .replace(/ة/g, "ه")
+    .replace(/ى/g, "ي")
+    .replace(/ـ/g, "")
+    .toLowerCase();
+}
+
 export function fmtMoney(n: number | null | undefined, lang: Lang = "AR"): string {
   const value = typeof n === "number" && isFinite(n) ? n : 0;
   const locale = lang === "AR" ? "ar-EG" : "en-EG";

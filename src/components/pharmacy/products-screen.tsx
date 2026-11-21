@@ -7,7 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useApp } from "@/lib/store";
 import { useI18n, PageHeader, EmptyState, Pagination, ConfirmDialog } from "./shared";
 import { api, ApiError } from "@/lib/client-api";
-import { fmtMoney, fmtDate, daysUntil, expiryStatus } from "@/lib/format";
+import { fmtMoney, fmtDate, daysUntil, expiryStatus, normalizeName } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,7 +21,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import {
-  Pill, Plus, Pencil, Trash2, Eye, PackageSearch, Boxes, GitCompareArrows, Search, RefreshCw,
+  Pill, Plus, Pencil, Trash2, Eye, PackageSearch, Boxes, GitCompareArrows, Search, RefreshCw, AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -80,6 +80,11 @@ export default function ProductsScreen() {
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
 
+  // فحص التكرار أثناء الإضافة/التعديل: بحث بالاسم + الباركود ومنع إضافة صنف موجود
+  const [nameDup, setNameDup] = useState<Product | null>(null);
+  const [barcodeDup, setBarcodeDup] = useState<Product | null>(null);
+  const [nameMatches, setNameMatches] = useState<Product[]>([]);
+
   const [detail, setDetail] = useState<ProductDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
@@ -107,9 +112,42 @@ export default function ProductsScreen() {
     api("/master-data").then(setMasterData).catch(() => {});
   }, []);
 
+  // بحث حي بالاسم أثناء الكتابة: عرض الأصناف المشابهة وكشف الصنف المكرر
+  useEffect(() => {
+    if (!formOpen) return;
+    const name = form.tradeName.trim();
+    if (name.length < 2) { setNameDup(null); setNameMatches([]); return; }
+    const timer = setTimeout(async () => {
+      try {
+        const d = await api(`/products?q=${encodeURIComponent(name)}&limit=6`);
+        const others: Product[] = (d.items || []).filter((p: Product) => !editing || p.id !== editing.id);
+        const nn = normalizeName(name);
+        setNameDup(others.find((p) => normalizeName(p.tradeName) === nn) || null);
+        setNameMatches(others.slice(0, 5));
+      } catch {}
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [form.tradeName, formOpen, editing]);
+
+  // فحص الباركود أثناء الكتابة: منع استخدام باركود صنف موجود
+  useEffect(() => {
+    if (!formOpen) return;
+    const bc = form.barcode.trim();
+    if (bc.length < 4) { setBarcodeDup(null); return; }
+    const timer = setTimeout(async () => {
+      try {
+        const d = await api(`/products?q=${encodeURIComponent(bc)}&limit=5`);
+        const others: Product[] = (d.items || []).filter((p: Product) => !editing || p.id !== editing.id);
+        setBarcodeDup(others.find((p) => p.barcode === bc) || null);
+      } catch {}
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [form.barcode, formOpen, editing]);
+
   const openCreate = () => {
     setEditing(null);
     setForm({ ...emptyForm });
+    setNameDup(null); setBarcodeDup(null); setNameMatches([]);
     setFormOpen(true);
   };
 
@@ -124,12 +162,17 @@ export default function ProductsScreen() {
       minStock: String(p.minStock), reorderPoint: String(p.reorderPoint),
       shelfLocation: p.shelfLocation || "", requiresPrescription: p.requiresPrescription,
     });
+    setNameDup(null); setBarcodeDup(null); setNameMatches([]);
     setFormOpen(true);
   };
 
   const save = async () => {
     if (!form.barcode.trim() || !form.tradeName.trim()) {
       toast.error(t("app.required"));
+      return;
+    }
+    if (nameDup || barcodeDup) {
+      toast.error(lang === "AR" ? "لا يمكن الحفظ — الصنف موجود بالفعل بالاسم أو الباركود" : "Cannot save — product already exists");
       return;
     }
     setSaving(true);
@@ -290,8 +333,40 @@ export default function ProductsScreen() {
             </DialogTitle>
           </DialogHeader>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div><Label>{t("prod.barcode")} *</Label><Input dir="ltr" value={form.barcode} onChange={(e) => setForm({ ...form, barcode: e.target.value })} className="mt-1 font-mono" /></div>
-            <div><Label>{t("prod.tradeName")} *</Label><Input value={form.tradeName} onChange={(e) => setForm({ ...form, tradeName: e.target.value })} className="mt-1" /></div>
+            <div>
+              <Label>{t("prod.barcode")} *</Label>
+              <Input dir="ltr" value={form.barcode} onChange={(e) => setForm({ ...form, barcode: e.target.value })} className="mt-1 font-mono" />
+              {barcodeDup && (
+                <p className="mt-1 text-xs font-medium text-red-600 flex items-center gap-1">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                  {lang === "AR" ? `الباركود مستخدم للصنف «${barcodeDup.tradeName}» — لا يمكن التكرار` : `Barcode already used by "${barcodeDup.tradeName}"`}
+                </p>
+              )}
+            </div>
+            <div>
+              <Label>{t("prod.tradeName")} *</Label>
+              <Input value={form.tradeName} onChange={(e) => setForm({ ...form, tradeName: e.target.value })} className="mt-1" />
+              {nameDup ? (
+                <p className="mt-1 text-xs font-medium text-red-600 flex items-center gap-1">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                  {lang === "AR"
+                    ? `هذا الصنف موجود بالفعل: «${nameDup.tradeName}» (باركود ${nameDup.barcode}) — لا يمكن إضافة صنف مكرر`
+                    : `Product already exists: "${nameDup.tradeName}"`}
+                </p>
+              ) : nameMatches.length > 0 && form.tradeName.trim().length >= 2 ? (
+                <div className="mt-1 rounded border bg-muted/40 p-1.5 text-xs">
+                  <p className="text-muted-foreground mb-0.5">
+                    {lang === "AR" ? "أصناف مشابهة موجودة — تأكد قبل الحفظ:" : "Similar products found:"}
+                  </p>
+                  {nameMatches.map((m) => (
+                    <div key={m.id} className="flex items-center justify-between gap-2 px-1 py-0.5">
+                      <span className="font-medium">{m.tradeName}</span>
+                      <span className="font-mono text-[11px] text-muted-foreground" dir="ltr">{m.barcode}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
             <div><Label>{t("prod.tradeNameEn")}</Label><Input dir="ltr" value={form.tradeNameEn} onChange={(e) => setForm({ ...form, tradeNameEn: e.target.value })} className="mt-1" /></div>
             <div><Label>{t("prod.scientificName")}</Label><Input dir="ltr" value={form.scientificName} onChange={(e) => setForm({ ...form, scientificName: e.target.value })} className="mt-1" /></div>
             <div>
@@ -360,7 +435,7 @@ export default function ProductsScreen() {
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => setFormOpen(false)}>{t("app.cancel")}</Button>
-            <Button onClick={save} disabled={saving}>{saving ? t("app.loading") : t("app.save")}</Button>
+            <Button onClick={save} disabled={saving || !!nameDup || !!barcodeDup}>{saving ? t("app.loading") : t("app.save")}</Button>
           </div>
         </DialogContent>
       </Dialog>

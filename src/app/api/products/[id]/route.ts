@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireAuth, handleApiError, ApiError } from "@/lib/server/auth";
 import { logAudit } from "@/lib/server/core";
+import { normalizeName } from "@/lib/format";
 
 /** تفاصيل دواء — تشغيلات + بدائل دوائية */
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -51,7 +52,19 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!existing) throw new ApiError(404, "الدواء غير موجود");
     if (body.barcode && body.barcode !== existing.barcode) {
       const dup = await db.product.findUnique({ where: { barcode: String(body.barcode).trim() } });
-      if (dup) throw new ApiError(400, "الباركود مستخدم بالفعل لمنتج آخر");
+      if (dup) throw new ApiError(400, `الباركود مستخدم بالفعل للصنف «${dup.tradeName}»`);
+    }
+    // منع تكرار اسم الصنف عند التعديل (بحث بالاسم مع توحيد الهمزات والمسافات — يستثني الصنف نفسه)
+    if (body.tradeName != null) {
+      const nameNorm = normalizeName(String(body.tradeName));
+      if (nameNorm !== normalizeName(existing.tradeName)) {
+        const others = await db.product.findMany({
+          where: { id: { not: id } },
+          select: { id: true, tradeName: true },
+        });
+        const dupName = others.find((p) => normalizeName(p.tradeName) === nameNorm);
+        if (dupName) throw new ApiError(409, `يوجد صنف بنفس الاسم «${dupName.tradeName}» — لا يمكن تكرار اسم الصنف`);
+      }
     }
     const product = await db.product.update({
       where: { id },

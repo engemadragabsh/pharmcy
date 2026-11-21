@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireAuth, handleApiError, ApiError } from "@/lib/server/auth";
 import { logAudit } from "@/lib/server/core";
+import { normalizeName } from "@/lib/format";
 
 /** قائمة الأدوية — بحث + تصفية + ترقيم صفحات */
 export async function GET(req: NextRequest) {
@@ -81,7 +82,13 @@ export async function POST(req: NextRequest) {
     if (Number(sellPrice) < Number(purchasePrice)) throw new ApiError(400, "سعر البيع لا يمكن أن يكون أقل من سعر الشراء");
 
     const exists = await db.product.findUnique({ where: { barcode: String(barcode).trim() } });
-    if (exists) throw new ApiError(400, "الباركود مستخدم بالفعل لمنتج آخر");
+    if (exists) throw new ApiError(400, `الباركود مستخدم بالفعل للصنف «${exists.tradeName}»`);
+
+    // منع إضافة صنف موجود بنفس الاسم (بحث بالاسم مع توحيد الهمزات والمسافات)
+    const nameNorm = normalizeName(String(tradeName));
+    const allNames = await db.product.findMany({ select: { id: true, tradeName: true } });
+    const dupName = allNames.find((p) => normalizeName(p.tradeName) === nameNorm);
+    if (dupName) throw new ApiError(409, `يوجد صنف بنفس الاسم «${dupName.tradeName}» — لا يمكن إضافة صنف مكرر`);
 
     const product = await db.product.create({
       data: {

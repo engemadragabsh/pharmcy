@@ -298,14 +298,15 @@ async function main() {
     }
   }
 
-  // 5) ملء الفجوة بزيادة أحجام العبوات (أحجام حقيقية في السوق)
+  // 5) ملء الفجوة بزيادة أحجام العبوات (أحجام حقيقية في السوق) — مع مخزون احتياطي لاستبدال الأسماء المتكررة
   let base = [...merged];
   const extra = [];
   let pass = 0;
-  while (base.length + extra.length < needed && pass < 10) {
+  const POOL_TARGET = needed + 200;
+  while (base.length + extra.length < POOL_TARGET && pass < 12) {
     let addedThisPass = 0;
     for (const c of base) {
-      if (base.length + extra.length >= needed) break;
+      if (base.length + extra.length >= POOL_TARGET) break;
       if (c.noExpand || !c.formKey) continue;
       const all = PACKS[c.formKey] || [];
       const nextIdx = c.packsUsed;
@@ -324,27 +325,41 @@ async function main() {
     if (addedThisPass === 0) break;
     pass++;
   }
-  const finalList = [...base, ...extra].slice(0, needed);
+  const pool = [...base, ...extra];
+
+  // 6) منع إضافة صنف موجود بالاسم — توحيد الهمزات والمسافات ثم المقارنة مع أسماء القاعدة الحالية
+  const normName = (s) => String(s || "").trim().replace(/\s+/g, " ").replace(/[أإآ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي").replace(/ـ/g, "").toLowerCase();
+  const dbNames = await db.product.findMany({ select: { tradeName: true } });
+  const dbNorm = new Set(dbNames.map((p) => normName(p.tradeName)));
+  const skippedDB = [];
+  const kept = [];
+  for (const c of pool) {
+    const k = normName(c.name);
+    if (dbNorm.has(k)) { skippedDB.push(c.name); continue; }
+    kept.push(c);
+  }
+  const finalList = kept.slice(0, needed);
   console.log(`🧮 المجموعات المتاحة: ${combos.length} + توسيع عبوات ${extra.length} — سيتم إدخال ${finalList.length}`);
+  if (skippedDB.length) console.log(`🚫 منع التكرار: تم تخطي ${skippedDB.length} صنف موجود مسبقاً بالاسم في القاعدة`);
   if (process.env.DRY_RUN) {
     const g = {};
     for (const c of finalList) g[c.cat] = (g[c.cat] || 0) + 1;
-    console.log("DRY RUN — التوزيع:", JSON.stringify(g), "| السعة الكلية:", base.length + extra.length);
+    console.log("DRY RUN — التوزيع:", JSON.stringify(g), "| السعة الكلية:", pool.length);
     return;
   }
 
-  // 6) أسماء فريدة (عند التكرار نضيف حجم العبوة للاسم) — مع مراعاة أسماء القاعدة الحالية
-  const nameCount = new Map();
-  const dbNames = await db.product.findMany({ select: { tradeName: true } });
-  for (const p of dbNames) nameCount.set(p.tradeName, (nameCount.get(p.tradeName) || 0) + 1);
-  for (const c of finalList) nameCount.set(c.name, (nameCount.get(c.name) || 0) + 1);
-  const seenName = new Map();
+  // 6-ب) إزالة التكرار الداخلي بالاسم — إلحاق حجم العبوة ثم رقم تسلسلي عند التعارض
+  const seenNorm = new Set();
   for (const c of finalList) {
-    if ((nameCount.get(c.name) || 0) > 1 && !c.name.includes("—")) {
-      const n = (seenName.get(c.name) || 0) + 1;
-      seenName.set(c.name, n);
-      c.name = `${c.name} — ${c.pack || n}`;
+    const k = normName(c.name);
+    if (!seenNorm.has(k)) { seenNorm.add(k); continue; }
+    let newName = c.pack ? `${c.name} — ${c.pack}` : "";
+    if (!newName || seenNorm.has(normName(newName)) || dbNorm.has(normName(newName))) {
+      let i = 2;
+      do { newName = `${c.name} (${i++})`; } while (seenNorm.has(normName(newName)) || dbNorm.has(normName(newName)));
     }
+    c.name = newName;
+    seenNorm.add(normName(c.name));
   }
 
   // 7) باركودات فريدة متسلسلة
