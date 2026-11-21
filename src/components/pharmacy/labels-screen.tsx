@@ -149,7 +149,7 @@ export default function LabelsScreen() {
   // اسم الصيدلية الافتراضي من الإعدادات
   useEffect(() => {
     if (nameTouched || !settings) return;
-    const def = lang === "AR" ? settings.pharmacyName || "صيدلية الشفاء" : settings.pharmacyNameEn || settings.pharmacyName || "Al-Shifaa Pharmacy";
+    const def = lang === "AR" ? settings.pharmacyName || t("app.name") : settings.pharmacyNameEn || settings.pharmacyName || t("app.name");
     setOpts((o) => ({ ...o, pharmacyName: def }));
   }, [settings, lang, nameTouched]);
 

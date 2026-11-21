@@ -6,7 +6,7 @@ export type Lang = "AR" | "EN";
 
 export const dict: Record<string, { ar: string; en: string }> = {
   // ─── عام ───
-  "app.name": { ar: "صيدلية الشفاء", en: "Al-Shifaa Pharmacy" },
+  "app.name": { ar: "نظام إدارة الصيدليات", en: "Pharmacy PMS" },
   "app.system": { ar: "نظام إدارة الصيدليات", en: "Pharmacy Management System" },
   "app.loading": { ar: "جارٍ التحميل...", en: "Loading..." },
   "app.error": { ar: "خطأ", en: "Error" },

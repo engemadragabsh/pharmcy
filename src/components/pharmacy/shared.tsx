@@ -35,14 +35,31 @@ export function useI18n() {
   return { t, lang, dir, setLang };
 }
 
-/** ضبط اتجاه الصفحة حسب اللغة */
+/** ضبط اتجاه الصفحة حسب اللغة + عنوان التبويب من اسم الصيدلية المحفوظ في الإعدادات */
 export function useDirection() {
   const { lang } = useI18n();
+  const settings = useApp((s) => s.settings);
   useEffect(() => {
     document.documentElement.lang = lang === "AR" ? "ar" : "en";
     document.documentElement.dir = lang === "AR" ? "rtl" : "ltr";
-    document.title = lang === "AR" ? "صيدلية الشفاء — نظام إدارة الصيدليات" : "Al-Shifaa Pharmacy — PMS";
-  }, [lang]);
+    const brand = lang === "AR"
+      ? settings?.pharmacyName
+      : settings?.pharmacyNameEn || settings?.pharmacyName;
+    document.title = brand ? `${brand} — ${translate("app.system", lang)}` : translate("app.system", lang);
+  }, [lang, settings]);
+}
+
+/**
+ * اسم الصيدلية المعروض في الشاشات — مصدره الوحيد بيانات شاشة الإعدادات المحفوظة
+ * (settings.pharmacyName / settings.pharmacyNameEn) مع بديل عام عند عدم الضبط.
+ */
+export function usePharmacyName(): string {
+  const { lang, t } = useI18n();
+  const settings = useApp((s) => s.settings);
+  const name = lang === "AR"
+    ? settings?.pharmacyName
+    : settings?.pharmacyNameEn || settings?.pharmacyName;
+  return name && String(name).trim() ? name : t("app.name");
 }
 
 export function PageHeader({

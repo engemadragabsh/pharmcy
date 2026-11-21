@@ -58,7 +58,8 @@ export function InvoicePrintDialog({
 
   if (!invoice) return null;
 
-  const pharmacyName = lang === "AR" ? settings?.pharmacyName || "صيدلية الشفاء" : settings?.pharmacyNameEn || settings?.pharmacyName || "Al-Shifaa Pharmacy";
+  // اسم الصيدلية من الإعدادات المحفوظة — البديل العام اسم النظام فقط
+  const pharmacyName = lang === "AR" ? settings?.pharmacyName || t("app.name") : settings?.pharmacyNameEn || settings?.pharmacyName || t("app.name");
   const etaPayload = `اسم الصيدلية: ${pharmacyName}\nالرقم الضريبي: ${settings?.taxNumber || "-"}\nالتاريخ: ${fmtDate(invoice.createdAt, lang, true)}\nالإجمالي: ${invoice.total}\nالضريبة: ${invoice.tax}\nUUID: ${invoice.eInvoiceUuid || "-"}`;
 
   const sendVia = (channel: string) => {

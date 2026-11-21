@@ -5,7 +5,7 @@
  * الفواتير والضرائب، POS، المخزون، الإشعارات، النسخ الاحتياطي، التكاملات،
  * المظهر واللغة، البيانات الأساسية، سجل النشاط
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { useApp } from "@/lib/store";
 import { useI18n, PageHeader, EmptyState, Pagination } from "./shared";
 import { api, ApiError } from "@/lib/client-api";
@@ -36,6 +36,63 @@ import { cn } from "@/lib/utils";
 
 const MODULES = ["dashboard", "pos", "products", "inventory", "prescriptions", "customers", "suppliers", "finance", "hr", "reports", "settings"];
 const ACTIONS = ["set.viewName", "set.createName", "set.editName", "set.deleteName", "set.exportName"];
+
+/*
+ * حقول الإعدادات — معرّفة على مستوى الملف (خارج المكون) حتى لا يتغير نوعها بين
+ * الرندرات: تعريفها داخل المكون كان يجعل React يعيد إنشاؤها مع كل ضغطة حرف
+ * فيفقد حقل الإدخال التركيز بعد أول حرف (عطل الخروج من التكست).
+ */
+function TextField({
+  s,
+  setS,
+  label,
+  field,
+  type = "text",
+  dir,
+}: {
+  s: any;
+  setS: Dispatch<SetStateAction<any>>;
+  label: string;
+  field: string;
+  type?: string;
+  dir?: string;
+}) {
+  return (
+    <div>
+      <Label className="text-xs">{label}</Label>
+      <Input
+        type={type}
+        dir={dir}
+        value={s?.[field] ?? ""}
+        onChange={(e) => setS((p: any) => ({ ...p, [field]: e.target.value }))}
+        className="mt-1 h-9"
+      />
+    </div>
+  );
+}
+
+function SwitchField({
+  s,
+  setS,
+  label,
+  field,
+}: {
+  s: any;
+  setS: Dispatch<SetStateAction<any>>;
+  label: string;
+  field: string;
+}) {
+  return (
+    <div className="flex items-center justify-between p-2.5 rounded-lg border">
+      <span className="text-sm">{label}</span>
+      <Switch
+        checked={!!s?.[field]}
+        onCheckedChange={(c) => setS((p: any) => ({ ...p, [field]: c }))}
+        aria-label={label}
+      />
+    </div>
+  );
+}
 
 export default function SettingsScreen() {
   const { t, lang } = useI18n();
@@ -275,20 +332,6 @@ export default function SettingsScreen() {
     } catch {}
   };
 
-  const SwitchField = ({ label, field }: { label: string; field: string }) => (
-    <div className="flex items-center justify-between p-2.5 rounded-lg border">
-      <span className="text-sm">{label}</span>
-      <Switch checked={!!s?.[field]} onCheckedChange={(c) => setS({ ...s, [field]: c })} aria-label={label} />
-    </div>
-  );
-
-  const TextField = ({ label, field, type = "text", dir }: { label: string; field: string; type?: string; dir?: string }) => (
-    <div>
-      <Label className="text-xs">{label}</Label>
-      <Input type={type} dir={dir} value={s?.[field] ?? ""} onChange={(e) => setS({ ...s, [field]: e.target.value })} className="mt-1 h-9" />
-    </div>
-  );
-
   const MD_TABS = [
     { key: "manufacturers", label: t("set.manufacturers") },
     { key: "ingredients", label: t("set.ingredients") },
@@ -334,17 +377,17 @@ export default function SettingsScreen() {
         {/* ─── الملف التعريفي ─── */}
         <TabsContent value="profile">
           <Card><CardContent className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-            <TextField label={t("set.pharmacyName")} field="pharmacyName" />
-            <TextField label={t("set.nameEn")} field="pharmacyNameEn" dir="ltr" />
-            <TextField label={t("set.commercialReg")} field="commercialReg" dir="ltr" />
-            <TextField label={t("set.taxNumber")} field="taxNumber" dir="ltr" />
-            <TextField label={t("set.licenseNumber")} field="licenseNumber" dir="ltr" />
+            <TextField s={s} setS={setS} label={t("set.pharmacyName")} field="pharmacyName" />
+            <TextField s={s} setS={setS} label={t("set.nameEn")} field="pharmacyNameEn" dir="ltr" />
+            <TextField s={s} setS={setS} label={t("set.commercialReg")} field="commercialReg" dir="ltr" />
+            <TextField s={s} setS={setS} label={t("set.taxNumber")} field="taxNumber" dir="ltr" />
+            <TextField s={s} setS={setS} label={t("set.licenseNumber")} field="licenseNumber" dir="ltr" />
             <div>
               <Label className="text-xs">{t("set.licenseExpiry")}</Label>
               <Input type="date" value={s?.licenseExpiry ? String(s.licenseExpiry).slice(0, 10) : ""} onChange={(e) => setS({ ...s, licenseExpiry: e.target.value })} className="mt-1 h-9" />
             </div>
-            <TextField label={t("app.phone")} field="phone" dir="ltr" />
-            <TextField label={t("app.email")} field="email" dir="ltr" />
+            <TextField s={s} setS={setS} label={t("app.phone")} field="phone" dir="ltr" />
+            <TextField s={s} setS={setS} label={t("app.email")} field="email" dir="ltr" />
             <div className="md:col-span-2"><Label className="text-xs">{t("app.address")}</Label><Textarea rows={2} value={s?.address ?? ""} onChange={(e) => setS({ ...s, address: e.target.value })} className="mt-1" /></div>
           </CardContent></Card>
         </TabsContent>
@@ -490,10 +533,10 @@ export default function SettingsScreen() {
         {/* ─── الفواتير والضرائب ─── */}
         <TabsContent value="invoices">
           <Card><CardContent className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-            <TextField label={t("set.invoicePrefix")} field="invoicePrefix" dir="ltr" />
-            <TextField label={t("set.defaultTaxRate")} field="defaultTaxRate" type="number" />
-            <TextField label={t("set.invoiceHeader")} field="invoiceHeader" />
-            <TextField label={t("set.invoiceFooter")} field="invoiceFooter" />
+            <TextField s={s} setS={setS} label={t("set.invoicePrefix")} field="invoicePrefix" dir="ltr" />
+            <TextField s={s} setS={setS} label={t("set.defaultTaxRate")} field="defaultTaxRate" type="number" />
+            <TextField s={s} setS={setS} label={t("set.invoiceHeader")} field="invoiceHeader" />
+            <TextField s={s} setS={setS} label={t("set.invoiceFooter")} field="invoiceFooter" />
             <div className="md:col-span-2"><Label className="text-xs">{t("set.invoiceTerms")}</Label><Textarea rows={2} value={s?.invoiceTerms ?? ""} onChange={(e) => setS({ ...s, invoiceTerms: e.target.value })} className="mt-1" /></div>
           </CardContent></Card>
         </TabsContent>
@@ -524,18 +567,18 @@ export default function SettingsScreen() {
                 </SelectContent>
               </Select>
             </div>
-            <TextField label={t("set.loyaltyEarnRate")} field="loyaltyEarnRate" type="number" />
-            <TextField label={t("set.loyaltyRedeemRate")} field="loyaltyRedeemRate" type="number" />
-            <TextField label={t("set.cashierMaxDiscount")} field="cashierMaxDiscount" type="number" />
-            <SwitchField label={t("set.loyaltyEnabled")} field="loyaltyEnabled" />
+            <TextField s={s} setS={setS} label={t("set.loyaltyEarnRate")} field="loyaltyEarnRate" type="number" />
+            <TextField s={s} setS={setS} label={t("set.loyaltyRedeemRate")} field="loyaltyRedeemRate" type="number" />
+            <TextField s={s} setS={setS} label={t("set.cashierMaxDiscount")} field="cashierMaxDiscount" type="number" />
+            <SwitchField s={s} setS={setS} label={t("set.loyaltyEnabled")} field="loyaltyEnabled" />
           </CardContent></Card>
         </TabsContent>
 
         {/* ─── المخزون والتنبيهات ─── */}
         <TabsContent value="inventory">
           <Card><CardContent className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-            <TextField label={t("set.defaultReorderPoint")} field="defaultReorderPoint" type="number" />
-            <TextField label={t("set.expiryAlertDays")} field="expiryAlertDays" />
+            <TextField s={s} setS={setS} label={t("set.defaultReorderPoint")} field="defaultReorderPoint" type="number" />
+            <TextField s={s} setS={setS} label={t("set.expiryAlertDays")} field="expiryAlertDays" />
             <div>
               <Label className="text-xs">{t("set.stockMethod")}</Label>
               <Select value={s?.stockMethod || "FEFO"} onValueChange={(v) => setS({ ...s, stockMethod: v })}>
@@ -547,20 +590,20 @@ export default function SettingsScreen() {
                 </SelectContent>
               </Select>
             </div>
-            <SwitchField label={t("set.alertLowStock")} field="alertLowStock" />
-            <SwitchField label={t("set.alertExpiry")} field="alertExpiry" />
-            <SwitchField label={t("set.alertPendingRx")} field="alertPendingRx" />
+            <SwitchField s={s} setS={setS} label={t("set.alertLowStock")} field="alertLowStock" />
+            <SwitchField s={s} setS={setS} label={t("set.alertExpiry")} field="alertExpiry" />
+            <SwitchField s={s} setS={setS} label={t("set.alertPendingRx")} field="alertPendingRx" />
           </CardContent></Card>
         </TabsContent>
 
         {/* ─── الإشعارات ─── */}
         <TabsContent value="notifications">
           <Card><CardContent className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-            <SwitchField label={t("set.notifyInApp")} field="notifyInApp" />
-            <SwitchField label={t("set.notifyEmail")} field="notifyEmail" />
-            <SwitchField label={t("set.notifySms")} field="notifySms" />
-            <SwitchField label={t("set.notifyWhatsapp")} field="notifyWhatsapp" />
-            <TextField label={`${t("set.tab.notifications")} — ${lang === "AR" ? "بريد التقارير التلقائية" : "Auto reports email"}`} field="autoReportsEmail" dir="ltr" />
+            <SwitchField s={s} setS={setS} label={t("set.notifyInApp")} field="notifyInApp" />
+            <SwitchField s={s} setS={setS} label={t("set.notifyEmail")} field="notifyEmail" />
+            <SwitchField s={s} setS={setS} label={t("set.notifySms")} field="notifySms" />
+            <SwitchField s={s} setS={setS} label={t("set.notifyWhatsapp")} field="notifyWhatsapp" />
+            <TextField s={s} setS={setS} label={`${t("set.tab.notifications")} — ${lang === "AR" ? "بريد التقارير التلقائية" : "Auto reports email"}`} field="autoReportsEmail" dir="ltr" />
           </CardContent></Card>
         </TabsContent>
 
@@ -705,22 +748,22 @@ export default function SettingsScreen() {
             <Card>
               <CardHeader className="pb-2"><CardTitle className="text-sm">{t("set.paymentGateways")}</CardTitle></CardHeader>
               <CardContent className="space-y-3">
-                <TextField label="Stripe — Publishable Key" field="stripeKey" dir="ltr" />
-                <TextField label="Paymob — API Key" field="paymobKey" dir="ltr" />
+                <TextField s={s} setS={setS} label="Stripe — Publishable Key" field="stripeKey" dir="ltr" />
+                <TextField s={s} setS={setS} label="Paymob — API Key" field="paymobKey" dir="ltr" />
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="pb-2"><CardTitle className="text-sm">{t("set.eta")}</CardTitle></CardHeader>
               <CardContent className="space-y-3">
-                <TextField label="ETA Client ID" field="etaClientId" dir="ltr" />
-                <TextField label="ETA Secret" field="etaSecret" dir="ltr" type="password" />
+                <TextField s={s} setS={setS} label="ETA Client ID" field="etaClientId" dir="ltr" />
+                <TextField s={s} setS={setS} label="ETA Secret" field="etaSecret" dir="ltr" type="password" />
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="pb-2"><CardTitle className="text-sm">{t("set.messaging")}</CardTitle></CardHeader>
               <CardContent className="space-y-3">
-                <TextField label="WhatsApp API Token" field="whatsappToken" dir="ltr" type="password" />
-                <TextField label="SMS Provider" field="smsProvider" dir="ltr" />
+                <TextField s={s} setS={setS} label="WhatsApp API Token" field="whatsappToken" dir="ltr" type="password" />
+                <TextField s={s} setS={setS} label="SMS Provider" field="smsProvider" dir="ltr" />
               </CardContent>
             </Card>
             <Card>

@@ -5,7 +5,7 @@
  */
 import { useEffect, useState } from "react";
 import { useApp, canAccess } from "@/lib/store";
-import { useI18n, useDirection } from "./shared";
+import { useI18n, useDirection, usePharmacyName } from "./shared";
 import { api } from "@/lib/client-api";
 import { fmtDate } from "@/lib/format";
 import { Button } from "@/components/ui/button";
@@ -59,6 +59,7 @@ export default function AppShell({
 }) {
   useDirection();
   const { t, lang, setLang } = useI18n();
+  const pharmacyName = usePharmacyName();
   const { auth, logout, branches, branchId, setBranchId, theme, setTheme } = useApp();
   const user = auth?.user;
   const [notifs, setNotifs] = useState<Notif[]>([]);
@@ -125,7 +126,7 @@ export default function AppShell({
             <PillIcon className="h-5 w-5" />
           </div>
           <div className="min-w-0">
-            <p className="font-bold text-sm truncate">{lang === "AR" ? "صيدلية الشفاء" : "Al-Shifaa Pharmacy"}</p>
+            <p className="font-bold text-sm truncate">{pharmacyName}</p>
             <p className="text-[10px] text-muted-foreground">{lang === "AR" ? "نظام إدارة الصيدليات" : "Pharmacy PMS"}</p>
           </div>
         </div>
@@ -321,7 +322,7 @@ export default function AppShell({
             <span className="flex items-center gap-1.5 min-w-0">
               <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
               <span className="truncate">
-                {t("nav.online")} • {lang === "AR" ? "صيدلية الشفاء" : "Al-Shifaa Pharmacy"}
+                {t("nav.online")} • {pharmacyName}
                 <span dir="ltr" className="tabular-nums"> v1.0</span>
               </span>
             </span>

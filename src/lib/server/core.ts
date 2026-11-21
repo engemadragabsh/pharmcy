@@ -14,8 +14,8 @@ export async function getSettings() {
     s = await db.settings.create({
       data: {
         id: "main",
-        pharmacyName: "صيدلية الشفاء",
-        pharmacyNameEn: "Al-Shifaa Pharmacy",
+        pharmacyName: "صيدلية جديدة",
+        pharmacyNameEn: "New Pharmacy",
       },
     });
   }

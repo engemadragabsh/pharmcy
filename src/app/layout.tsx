@@ -3,10 +3,10 @@ import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 
 export const metadata: Metadata = {
-  title: "صيدلية الشفاء — نظام إدارة الصيدليات",
+  title: "نظام إدارة الصيدليات",
   description: "نظام إدارة صيدليات متكامل: نقطة بيع، مخزون FEFO، فاتورة إلكترونية ETA، تداخلات دوائية، تقارير وطباعة حرارية",
   keywords: ["Pharmacy Management", "نظام صيدليات", "POS", "FEFO", "ETA", "مخزون", "فواتير"],
-  applicationName: "Al-Shifaa Pharmacy PMS",
+  applicationName: "Pharmacy PMS",
   manifest: "/manifest.json",
 };
 

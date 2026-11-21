@@ -1,4 +1,4 @@
-# صيدلية الشفاء — Pharmacy PMS
+# نظام إدارة الصيدليات — Pharmacy PMS
 
 <div align="center">
 
@@ -170,6 +170,6 @@ npm start          # standalone server على المنفذ 3000
 
 **Next.js 16** · **TypeScript Strict** · **Prisma + SQLite** · **TailwindCSS** · **shadcn/ui** · **Zustand** · **jose JWT** · **Lucide**
 
-جميع الحقوق محفوظة © 2026 — صيدلية الشفاء
+جميع الحقوق محفوظة © 2026 — نظام إدارة الصيدليات
 
 </div>

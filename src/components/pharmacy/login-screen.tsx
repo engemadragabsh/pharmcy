@@ -3,7 +3,7 @@
 /**
  * شاشة تسجيل الدخول — مستخدم/كلمة مرور + PIN سريع + اختيار الفرع
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useApp, Branch, SessionUser } from "@/lib/store";
 import { useI18n, useDirection } from "./shared";
 import { api, ApiError } from "@/lib/client-api";
@@ -36,6 +36,14 @@ export default function LoginScreen() {
   // اختيار الفرع بعد الدخول
   const [branchDialog, setBranchDialog] = useState(false);
   const [pendingSession, setPendingSession] = useState<{ accessToken: string; refreshToken: string; user: SessionUser; branches: Branch[] } | null>(null);
+  // اسم الصيدلية من الإعدادات المحفوظة (عبر نقطة عامة قبل تسجيل الدخول)
+  const [brand, setBrand] = useState<{ pharmacyName?: string; pharmacyNameEn?: string } | null>(null);
+  useEffect(() => {
+    api("/auth/brand").then((b) => setBrand(b)).catch(() => {});
+  }, []);
+  const brandName = lang === "AR"
+    ? brand?.pharmacyName
+    : brand?.pharmacyNameEn || brand?.pharmacyName;
 
   const applyThemeToggle = () => {
     const next = theme === "dark" ? "light" : "dark";
@@ -116,7 +124,7 @@ export default function LoginScreen() {
           <div className="h-16 w-16 rounded-2xl bg-primary text-primary-foreground flex items-center justify-center mb-6 shadow-lg shadow-primary/20">
             <Pill className="h-8 w-8" />
           </div>
-          <h1 className="text-3xl font-bold mb-2">{t("app.name")}</h1>
+          <h1 className="text-3xl font-bold mb-2">{brandName || t("app.name")}</h1>
           <p className="text-lg text-muted-foreground mb-8">{t("app.system")}</p>
           <ul className="space-y-3 text-sm">
             {[
@@ -143,7 +151,7 @@ export default function LoginScreen() {
               <div className="h-14 w-14 rounded-2xl bg-primary text-primary-foreground flex items-center justify-center mb-3">
                 <Pill className="h-7 w-7" />
               </div>
-              <h1 className="text-xl font-bold">{t("app.name")}</h1>
+              <h1 className="text-xl font-bold">{brandName || t("app.name")}</h1>
               <p className="text-sm text-muted-foreground">{t("app.system")}</p>
             </div>
 

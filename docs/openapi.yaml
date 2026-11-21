@@ -1,15 +1,15 @@
 openapi: 3.0.3
 info:
-  title: Al-Shifaa Pharmacy Management System API
+  title: Pharmacy Management System API
   description: |
-    واجهة REST لنظام إدارة الصيدليات — صيدلية الشفاء.
+    واجهة REST لنظام إدارة الصيدليات.
     - المصادقة: JWT (Bearer) — رمز وصول صالح لساعة + رمز تجديد لأسبوع.
     - الصلاحيات: RBAC بخمسة أدوار (ADMIN, PHARMACIST, CASHIER, ACCOUNTANT, INVENTORY_MANAGER).
     - رسائل الخطأ بالعربية: { "error": "..." }
     - البيئة المصرية: عملة EGP، ضريبة افتراضية 14%، فاتورة إلكترونية ETA (UUID + QR).
   version: 1.0.0
   contact:
-    name: Al-Shifaa Pharmacy PMS
+    name: Pharmacy Management System
 
 servers:
   - url: /api
