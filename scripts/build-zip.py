@@ -7,7 +7,7 @@ import subprocess, zipfile, os, sys, datetime
 
 ROOT = "/home/z/my-project"
 SNAPSHOT = "/tmp/db-snapshot.db"
-OUT = "/home/z/my-project/download/pharmacy-project-with-data-2026-11-20.zip"
+OUT = f"/home/z/my-project/download/pharmacy-project-with-data-{datetime.date.today().isoformat()}.zip"
 
 START_HERE = """═══════════════════════════════════════════════════════
    نظام إدارة الصيدليات — نسخة كاملة جاهزة للتشغيل
