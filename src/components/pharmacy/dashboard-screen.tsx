@@ -3,7 +3,7 @@
 /**
  * لوحة التحكم — مؤشرات الأداء، رسوم بيانية، تنبيهات فورية، أحدث الفواتير
  */
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useApp } from "@/lib/store";
 import { useI18n, PageHeader, StatCard, EmptyState, paymentLabel } from "./shared";
 import { api } from "@/lib/client-api";
@@ -17,13 +17,14 @@ import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, R
 import {
   LayoutDashboard, TrendingUp, Receipt, PackageX, CalendarClock,
   AlertTriangle, FileText, ShoppingCart, Wallet, Activity, Stethoscope,
+  Clock, RefreshCw,
 } from "lucide-react";
 
 interface DashData {
   kpis: {
     todaySales: number; monthSales: number; todayInvoices: number;
     lowStockCount: number; expiringCount: number; expiredCount: number;
-    pendingRx: number; cashInDrawer: number;
+    pendingRx: number; cashInDrawer: number; heldInvoices: number;
   };
   charts: {
     sales14d: Array<{ date: string; total: number; count: number }>;
@@ -48,20 +49,32 @@ export default function DashboardScreen({ onNavigate }: { onNavigate: (m: string
   const { branchId } = useApp();
   const [data, setData] = useState<DashData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
 
-  const load = async () => {
-    setLoading(true);
+  // silent = تحديث خلفي بدون وميض — البيانات القديمة تفضل معروضة لحد ما الجديدة توصل
+  const load = useCallback(async (silent = false) => {
+    if (!silent) { setLoading(true); setError(false); }
     try {
-      const d = await api(`/dashboard?branchId=${branchId || ""}`);
+      const d = await api<DashData>(`/dashboard?branchId=${branchId || ""}`);
       setData(d);
-    } catch {}
-    setLoading(false);
-  };
-
-  useEffect(() => {
-    load();
-     
+      setUpdatedAt(new Date());
+      setError(false);
+    } catch {
+      setError(true);
+    }
+    if (!silent) setLoading(false);
   }, [branchId]);
+
+  useEffect(() => { load(); }, [branchId, load]);
+
+  // التحديث التلقائي كل 30 ثانية + عند العودة للتبويب — اللوحة حية من قاعدة البيانات دايماً
+  useEffect(() => {
+    const id = setInterval(() => load(true), 30000);
+    const onFocus = () => load(true);
+    window.addEventListener("focus", onFocus);
+    return () => { clearInterval(id); window.removeEventListener("focus", onFocus); };
+  }, [load]);
 
   const fmtM = (n: number) => fmtMoney(n, lang);
   const fmtQ = (n: number) => fmtNum(n, lang);
@@ -76,7 +89,7 @@ export default function DashboardScreen({ onNavigate }: { onNavigate: (m: string
       <PageHeader
         icon={LayoutDashboard}
         title={t("dash.title")}
-        subtitle={`${fmtDate(new Date(), lang)} • ${data?.openShift ? `${t("dash.openShift")}: ${data.openShift.user}` : t("dash.noShift")}`}
+        subtitle={`${fmtDate(new Date(), lang)} • ${data?.openShift ? `${t("dash.openShift")}: ${data.openShift.user}` : t("dash.noShift")}${updatedAt ? ` • ${t("dash.lastUpdate")}: ${updatedAt.toLocaleTimeString(lang === "AR" ? "ar-EG" : "en-US")}` : ""}`}
         actions={
           <Button onClick={() => onNavigate("pos")} className="gap-2">
             <ShoppingCart className="h-4 w-4" /> {t("dash.newSale")}
@@ -84,10 +97,22 @@ export default function DashboardScreen({ onNavigate }: { onNavigate: (m: string
         }
       />
 
-      {loading || !data ? (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {[...Array(8)].map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}
-        </div>
+      {!data ? (
+        error ? (
+          <Card>
+            <CardContent className="py-12 flex flex-col items-center gap-3">
+              <AlertTriangle className="h-9 w-9 text-destructive" />
+              <p className="text-sm text-muted-foreground">{t("dash.loadError")}</p>
+              <Button variant="outline" onClick={() => load()} className="gap-2">
+                <RefreshCw className="h-4 w-4" /> {t("app.retry")}
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {[...Array(9)].map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}
+          </div>
+        )
       ) : (
         <>
           {/* KPIs */}
@@ -99,6 +124,7 @@ export default function DashboardScreen({ onNavigate }: { onNavigate: (m: string
             <StatCard title={t("dash.lowStock")} value={fmtQ(data.kpis.lowStockCount)} icon={PackageX} tone={data.kpis.lowStockCount > 0 ? "warning" : "default"} />
             <StatCard title={t("dash.expiring")} value={fmtQ(data.kpis.expiringCount)} icon={CalendarClock} tone={data.kpis.expiringCount > 0 ? "warning" : "default"} />
             <StatCard title={t("dash.expired")} value={fmtQ(data.kpis.expiredCount)} icon={AlertTriangle} tone={data.kpis.expiredCount > 0 ? "danger" : "default"} />
+            <StatCard title={t("dash.waitingList")} value={fmtQ(data.kpis.heldInvoices)} icon={Clock} tone={data.kpis.heldInvoices > 0 ? "warning" : "default"} hint={data.kpis.heldInvoices > 0 ? (lang === "AR" ? "فواتير مؤجلة في الكاشير" : "Held invoices at POS") : undefined} />
             <StatCard title={t("dash.todayInvoices")} value={fmtQ(data.kpis.todayInvoices)} icon={FileText} />
           </div>
 

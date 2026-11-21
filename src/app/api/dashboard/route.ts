@@ -21,12 +21,14 @@ export async function GET(req: NextRequest) {
     const saleWhere: any = { type: "SALE", status: { in: ["COMPLETED", "PARTIALLY_REFUNDED"] }, ...(branchId ? { branchId } : {}) };
 
     // ── المؤشرات ──
-    const [todayAgg, monthAgg, todayCount, pendingRx, openShift] = await Promise.all([
+    const [todayAgg, monthAgg, todayCount, pendingRx, openShift, heldCount] = await Promise.all([
       db.invoice.aggregate({ _sum: { total: true }, where: { ...saleWhere, createdAt: { gte: startOfDay } } }),
       db.invoice.aggregate({ _sum: { total: true }, where: { ...saleWhere, createdAt: { gte: startOfMonth } } }),
       db.invoice.count({ where: { ...saleWhere, createdAt: { gte: startOfDay } } }),
       db.prescription.count({ where: { status: "PENDING" } }),
       db.shift.findFirst({ where: { status: "OPEN", ...(branchId ? { branchId } : {}) }, include: { user: true }, orderBy: { openedAt: "desc" } }),
+      // قائمة الانتظار — الفواتير المؤجلة (HELD) من جدول Invoice
+      db.invoice.count({ where: { status: "HELD", ...(branchId ? { branchId } : {}) } }),
     ]);
 
     // ── المخزون: نواقص وصلاحيات ──
@@ -148,6 +150,7 @@ export async function GET(req: NextRequest) {
         expiredCount: expired.length,
         pendingRx,
         cashInDrawer,
+        heldInvoices: heldCount,
       },
       charts: { sales14d, sales12m, topProducts, topCustomers },
       alerts: {

@@ -47,6 +47,7 @@ export const dict: Record<string, { ar: string; en: string }> = {
   "app.currency": { ar: "ج.م", en: "EGP" },
   "app.more": { ar: "المزيد", en: "More" },
   "app.viewAll": { ar: "عرض الكل", en: "View All" },
+  "app.retry": { ar: "إعادة المحاولة", en: "Retry" },
   "app.details": { ar: "التفاصيل", en: "Details" },
   "app.required": { ar: "مطلوب", en: "Required" },
   "app.optional": { ar: "اختياري", en: "Optional" },
@@ -144,6 +145,9 @@ export const dict: Record<string, { ar: string; en: string }> = {
   "dash.openShift": { ar: "وردية مفتوحة", en: "Open Shift" },
   "dash.noShift": { ar: "لا توجد وردية مفتوحة", en: "No open shift" },
   "dash.invoices": { ar: "فواتير", en: "invoices" },
+  "dash.waitingList": { ar: "قائمة الانتظار", en: "Waiting List" },
+  "dash.lastUpdate": { ar: "آخر تحديث", en: "Last update" },
+  "dash.loadError": { ar: "تعذر تحميل بيانات اللوحة من الخادم", en: "Failed to load dashboard data" },
 
   // ─── نقطة البيع ───
   "pos.title": { ar: "نقطة البيع", en: "Point of Sale" },
