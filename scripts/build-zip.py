@@ -59,6 +59,8 @@ def main() -> int:
     now = datetime.datetime.now().timetuple()[:6]
     with zipfile.ZipFile(OUT, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         for f in files:
+            if f == "db/custom.db":
+                continue  # تُضاف من اللقطة المتسقة أدناه — تجنب الازدواج
             z.write(os.path.join(ROOT, f), f)
         z.write(SNAPSHOT, "db/custom.db")
         info = zipfile.ZipInfo("START-HERE.txt", date_time=now)
