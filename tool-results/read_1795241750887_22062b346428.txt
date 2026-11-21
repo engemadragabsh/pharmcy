@@ -1,0 +1,965 @@
+     1→"use client";
+     2→
+     3→/**
+     4→ * الإعدادات — 12 تبويب: الملف التعريفي، الفروع، المستخدمون والصلاحيات،
+     5→ * الفواتير والضرائب، POS، المخزون، الإشعارات، النسخ الاحتياطي، التكاملات،
+     6→ * المظهر واللغة، البيانات الأساسية، سجل النشاط
+     7→ */
+     8→import { useCallback, useEffect, useState } from "react";
+     9→import { useApp } from "@/lib/store";
+    10→import { useI18n, PageHeader, EmptyState, Pagination } from "./shared";
+    11→import { api, ApiError } from "@/lib/client-api";
+    12→import { fmtDate, fmtNum } from "@/lib/format";
+    13→import { Button } from "@/components/ui/button";
+    14→import { Input } from "@/components/ui/input";
+    15→import { Label } from "@/components/ui/label";
+    16→import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+    17→import { Badge } from "@/components/ui/badge";
+    18→import { Switch } from "@/components/ui/switch";
+    19→import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+    20→import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+    21→import {
+    22→  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+    23→  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+    24→} from "@/components/ui/alert-dialog";
+    25→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+    26→import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+    27→import { Textarea } from "@/components/ui/textarea";
+    28→import { toast } from "sonner";
+    29→import {
+    30→  Settings as SettingsIcon, Store, Building2, Users, FileText, ScanBarcode,
+    31→  Package, Bell, DatabaseBackup, Plug, Palette, Library, ScrollText, Plus,
+    32→  Trash2, History, EyeOff, Eye, Save, RotateCcw, ShieldCheck, Lock,
+    33→  Download, HardDriveDownload,
+    34→} from "lucide-react";
+    35→import { cn } from "@/lib/utils";
+    36→
+    37→const MODULES = ["dashboard", "pos", "products", "inventory", "prescriptions", "customers", "suppliers", "finance", "hr", "reports", "settings"];
+    38→const ACTIONS = ["set.viewName", "set.createName", "set.editName", "set.deleteName", "set.exportName"];
+    39→
+    40→export default function SettingsScreen() {
+    41→  const { t, lang } = useI18n();
+    42→  const { settings, setSettings, setLang, theme, setTheme } = useApp();
+    43→  const [s, setS] = useState<any>(settings);
+    44→  const [saving, setSaving] = useState(false);
+    45→
+    46→  // فروع / مستخدمون / بيانات أساسية / سجلات
+    47→  const [branches, setBranches] = useState<any[]>([]);
+    48→  const [users, setUsers] = useState<any[]>([]);
+    49→  const [userDialog, setUserDialog] = useState(false);
+    50→  const [userForm, setUserForm] = useState({ username: "", password: "", fullName: "", role: "PHARMACIST", pin: "", phone: "", branchId: "" });
+    51→  const [md, setMd] = useState<any>(null);
+    52→  const [mdDialog, setMdDialog] = useState<{ entity: string; edit?: any } | null>(null);
+    53→  const [mdForm, setMdForm] = useState({ name: "", nameEn: "", country: "", price: "", code: "", type: "PERCENT", value: "" });
+    54→  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+    55→  const [auditPage, setAuditPage] = useState(1);
+    56→  const [auditTotal, setAuditTotal] = useState(0);
+    57→  const [showPins, setShowPins] = useState(false);
+    58→
+    59→  // النسخ الاحتياطي والاستعادة
+    60→  const [backups, setBackups] = useState<any[]>([]);
+    61→  const [bkSummary, setBkSummary] = useState<{ count: number; totalBytes: number; dir: string } | null>(null);
+    62→  const [bkBusy, setBkBusy] = useState(false);
+    63→  const [confirmRestore, setConfirmRestore] = useState<string | null>(null);
+    64→  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+    65→
+    66→  const fmtQ = (n: number) => fmtNum(n, lang);
+    67→
+    68→  // ─── النسخ الاحتياطي: قائمة / استعادة / تنزيل / حذف ───
+    69→  const loadBackups = useCallback(async () => {
+    70→    try {
+    71→      const b = await api("/settings/backup");
+    72→      setBackups(b.items || []);
+    73→      setBkSummary({ count: b.count, totalBytes: b.totalBytes, dir: b.dir });
+    74→    } catch {}
+    75→  }, []);
+    76→
+    77→  const fmtSize = (bytes: number) =>
+    78→    bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+    79→
+    80→  const loadAll = useCallback(async () => {
+    81→    try {
+    82→      const st = await api("/settings");
+    83→      setS(st);
+    84→      setSettings(st);
+    85→    } catch {}
+    86→    try {
+    87→      const b = await api("/branches");
+    88→      setBranches(b.items || []);
+    89→    } catch {}
+    90→    try {
+    91→      const u = await api("/users");
+    92→      setUsers(u.items || []);
+    93→    } catch {}
+    94→    try {
+    95→      const m = await api("/master-data");
+    96→      setMd(m);
+    97→    } catch {}
+    98→    try {
+    99→      const a = await api(`/audit?page=1&limit=25`);
+   100→      setAuditLogs(a.items || []);
+   101→      setAuditTotal(a.total || 0);
+   102→    } catch {}
+   103→    await loadBackups();
+   104→     
+   105→  }, []);
+   106→
+   107→  useEffect(() => { loadAll(); }, [loadAll]);
+   108→
+   109→  const save = async (patch?: any) => {
+   110→    setSaving(true);
+   111→    try {
+   112→      const updated = await api("/settings", { method: "PUT", body: patch || s });
+   113→      setS(updated);
+   114→      setSettings(updated);
+   115→      toast.success(t("set.saved") + " ✓");
+   116→    } catch (e) {
+   117→      toast.error(e instanceof Error ? e.message : t("app.error"));
+   118→    }
+   119→    setSaving(false);
+   120→  };
+   121→
+   122→  const saveBranch = async (b: any) => {
+   123→    try {
+   124→      if (b.id) await api("/branches", { method: "PUT", body: b });
+   125→      else await api("/branches", { method: "POST", body: b });
+   126→      const data = await api("/branches");
+   127→      setBranches(data.items || []);
+   128→      toast.success(t("app.success") + " ✓");
+   129→    } catch (e) {
+   130→      toast.error(e instanceof Error ? e.message : t("app.error"));
+   131→    }
+   132→  };
+   133→
+   134→  const saveUser = async () => {
+   135→    try {
+   136→      await api("/users", { method: "POST", body: userForm });
+   137→      toast.success(t("app.success") + " ✓");
+   138→      setUserDialog(false);
+   139→      setUserForm({ username: "", password: "", fullName: "", role: "PHARMACIST", pin: "", phone: "", branchId: "" });
+   140→      const u = await api("/users");
+   141→      setUsers(u.items || []);
+   142→    } catch (e) {
+   143→      toast.error(e instanceof Error ? e.message : t("app.error"));
+   144→    }
+   145→  };
+   146→
+   147→  const toggleUser = async (u: any) => {
+   148→    try {
+   149→      if (u.isActive) {
+   150→        await api(`/users?id=${u.id}`, { method: "DELETE" });
+   151→      } else {
+   152→        await api("/users", { method: "PUT", body: { id: u.id, isActive: true } });
+   153→      }
+   154→      const data = await api("/users");
+   155→      setUsers(data.items || []);
+   156→    } catch (e) {
+   157→      toast.error(e instanceof Error ? e.message : t("app.error"));
+   158→    }
+   159→  };
+   160→
+   161→  const saveMd = async () => {
+   162→    if (!mdDialog) return;
+   163→    const entity = mdDialog.entity;
+   164→    try {
+   165→      const body: any = { entity, op: mdDialog.edit ? "update" : "create", data: { ...mdForm, id: mdDialog.edit?.id } };
+   166→      if (entity === "services") body.data.price = Number(mdForm.price || 0);
+   167→      if (entity === "coupons") {
+   168→        body.data.value = Number(mdForm.value || 0);
+   169→        body.data.type = mdForm.type;
+   170→      }
+   171→      await api("/master-data", { method: "POST", body });
+   172→      toast.success(t("app.success") + " ✓");
+   173→      setMdDialog(null);
+   174→      const m = await api("/master-data");
+   175→      setMd(m);
+   176→    } catch (e) {
+   177→      toast.error(e instanceof Error ? e.message : t("app.error"));
+   178→    }
+   179→  };
+   180→
+   181→  const deleteMd = async (entity: string, id: string) => {
+   182→    try {
+   183→      await api("/master-data", { method: "POST", body: { entity, op: "delete", data: { id } } });
+   184→      const m = await api("/master-data");
+   185→      setMd(m);
+   186→      toast.success(t("app.delete") + " ✓");
+   187→    } catch (e) {
+   188→      toast.error(e instanceof Error ? e.message : t("app.error"));
+   189→    }
+   190→  };
+   191→
+   192→  const runBackup = async () => {
+   193→    setBkBusy(true);
+   194→    try {
+   195→      const r = await api("/settings/backup", { method: "POST" });
+   196→      toast.success(`${t("set.bk.done")} — ${r.name}`);
+   197→      await loadBackups();
+   198→      const st = await api("/settings");
+   199→      setS(st);
+   200→      setSettings(st);
+   201→    } catch (e) {
+   202→      toast.error(e instanceof Error ? e.message : t("app.error"));
+   203→    }
+   204→    setBkBusy(false);
+   205→  };
+   206→
+   207→  const downloadBackup = async (name: string) => {
+   208→    try {
+   209→      const token = useApp.getState().auth?.token;
+   210→      const res = await fetch(`/api/settings/backup?download=${encodeURIComponent(name)}`, {
+   211→        headers: token ? { Authorization: `Bearer ${token}` } : {},
+   212→      });
+   213→      if (!res.ok) throw new Error("download failed");
+   214→      const blob = await res.blob();
+   215→      const a = document.createElement("a");
+   216→      a.href = URL.createObjectURL(blob);
+   217→      a.download = name;
+   218→      a.click();
+   219→      URL.revokeObjectURL(a.href);
+   220→      toast.success(t("set.bk.downloadDone") + " ✓");
+   221→    } catch {
+   222→      toast.error(t("app.error"));
+   223→    }
+   224→  };
+   225→
+   226→  const doRestore = async () => {
+   227→    if (!confirmRestore) return;
+   228→    setBkBusy(true);
+   229→    try {
+   230→      const r = await api("/settings/restore", { method: "POST", body: { name: confirmRestore } });
+   231→      toast.success(`${t("set.bk.restoreDone")} ✓ (${r.restoredCount} ${lang === "AR" ? "جدول" : "tables"})`);
+   232→      if (r.skippedCount > 0) {
+   233→        toast.warning(`${r.skippedCount} ${lang === "AR" ? "جدول تم تخطيه (اختلاف المخطط)" : "tables skipped (schema drift)"}`);
+   234→      }
+   235→      setConfirmRestore(null);
+   236→      await loadAll();
+   237→    } catch (e) {
+   238→      toast.error(e instanceof Error ? e.message : t("app.error"));
+   239→    }
+   240→    setBkBusy(false);
+   241→  };
+   242→
+   243→  const doDeleteBackup = async () => {
+   244→    if (!confirmDelete) return;
+   245→    setBkBusy(true);
+   246→    try {
+   247→      await api(`/settings/backup?name=${encodeURIComponent(confirmDelete)}`, { method: "DELETE" });
+   248→      toast.success(t("app.delete") + " ✓");
+   249→      setConfirmDelete(null);
+   250→      await loadBackups();
+   251→    } catch (e) {
+   252→      toast.error(e instanceof Error ? e.message : t("app.error"));
+   253→    }
+   254→    setBkBusy(false);
+   255→  };
+   256→
+   257→  const rollback = async () => {
+   258→    try {
+   259→      await api("/settings", { method: "POST", body: { action: "rollback" } });
+   260→      toast.success(t("set.rollback") + " ✓");
+   261→      const st = await api("/settings");
+   262→      setS(st);
+   263→      setSettings(st);
+   264→    } catch (e) {
+   265→      toast.error(e instanceof Error ? e.message : t("app.error"));
+   266→    }
+   267→  };
+   268→
+   269→  const loadAudit = async (p: number) => {
+   270→    try {
+   271→      const a = await api(`/audit?page=${p}&limit=25`);
+   272→      setAuditLogs(a.items || []);
+   273→      setAuditTotal(a.total || 0);
+   274→      setAuditPage(p);
+   275→    } catch {}
+   276→  };
+   277→
+   278→  const SwitchField = ({ label, field }: { label: string; field: string }) => (
+   279→    <div className="flex items-center justify-between p-2.5 rounded-lg border">
+   280→      <span className="text-sm">{label}</span>
+   281→      <Switch checked={!!s?.[field]} onCheckedChange={(c) => setS({ ...s, [field]: c })} aria-label={label} />
+   282→    </div>
+   283→  );
+   284→
+   285→  const TextField = ({ label, field, type = "text", dir }: { label: string; field: string; type?: string; dir?: string }) => (
+   286→    <div>
+   287→      <Label className="text-xs">{label}</Label>
+   288→      <Input type={type} dir={dir} value={s?.[field] ?? ""} onChange={(e) => setS({ ...s, [field]: e.target.value })} className="mt-1 h-9" />
+   289→    </div>
+   290→  );
+   291→
+   292→  const MD_TABS = [
+   293→    { key: "manufacturers", label: t("set.manufacturers") },
+   294→    { key: "ingredients", label: t("set.ingredients") },
+   295→    { key: "forms", label: t("set.forms") },
+   296→    { key: "units", label: t("set.units") },
+   297→    { key: "services", label: t("set.services") },
+   298→    { key: "coupons", label: t("set.coupons") },
+   299→  ];
+   300→
+   301→  return (
+   302→    <div>
+   303→      <PageHeader
+   304→        icon={SettingsIcon}
+   305→        title={t("set.title")}
+   306→        actions={
+   307→          <>
+   308→            <Button variant="outline" onClick={rollback} className="gap-2">
+   309→              <RotateCcw className="h-4 w-4" /> {t("set.rollback")}
+   310→            </Button>
+   311→            <Button onClick={() => save()} disabled={saving} className="gap-2">
+   312→              <Save className="h-4 w-4" /> {t("app.save")}
+   313→            </Button>
+   314→          </>
+   315→        }
+   316→      />
+   317→
+   318→      <Tabs defaultValue="profile" dir={lang === "AR" ? "rtl" : "ltr"}>
+   319→        <TabsList className="flex-wrap h-auto">
+   320→          <TabsTrigger value="profile" className="gap-1.5"><Store className="h-4 w-4" /> {t("set.tab.profile")}</TabsTrigger>
+   321→          <TabsTrigger value="branches" className="gap-1.5"><Building2 className="h-4 w-4" /> {t("set.tab.branches")}</TabsTrigger>
+   322→          <TabsTrigger value="users" className="gap-1.5"><Users className="h-4 w-4" /> {t("set.tab.users")}</TabsTrigger>
+   323→          <TabsTrigger value="invoices" className="gap-1.5"><FileText className="h-4 w-4" /> {t("set.tab.invoices")}</TabsTrigger>
+   324→          <TabsTrigger value="pos" className="gap-1.5"><ScanBarcode className="h-4 w-4" /> {t("set.tab.pos")}</TabsTrigger>
+   325→          <TabsTrigger value="inventory" className="gap-1.5"><Package className="h-4 w-4" /> {t("set.tab.inventory")}</TabsTrigger>
+   326→          <TabsTrigger value="notifications" className="gap-1.5"><Bell className="h-4 w-4" /> {t("set.tab.notifications")}</TabsTrigger>
+   327→          <TabsTrigger value="backup" className="gap-1.5"><DatabaseBackup className="h-4 w-4" /> {t("set.tab.backup")}</TabsTrigger>
+   328→          <TabsTrigger value="integrations" className="gap-1.5"><Plug className="h-4 w-4" /> {t("set.tab.integrations")}</TabsTrigger>
+   329→          <TabsTrigger value="appearance" className="gap-1.5"><Palette className="h-4 w-4" /> {t("set.tab.appearance")}</TabsTrigger>
+   330→          <TabsTrigger value="master" className="gap-1.5"><Library className="h-4 w-4" /> {t("set.tab.master")}</TabsTrigger>
+   331→          <TabsTrigger value="logs" className="gap-1.5"><ScrollText className="h-4 w-4" /> {t("set.tab.logs")}</TabsTrigger>
+   332→        </TabsList>
+   333→
+   334→        {/* ─── الملف التعريفي ─── */}
+   335→        <TabsContent value="profile">
+   336→          <Card><CardContent className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+   337→            <TextField label={t("set.pharmacyName")} field="pharmacyName" />
+   338→            <TextField label={t("set.nameEn")} field="pharmacyNameEn" dir="ltr" />
+   339→            <TextField label={t("set.commercialReg")} field="commercialReg" dir="ltr" />
+   340→            <TextField label={t("set.taxNumber")} field="taxNumber" dir="ltr" />
+   341→            <TextField label={t("set.licenseNumber")} field="licenseNumber" dir="ltr" />
+   342→            <div>
+   343→              <Label className="text-xs">{t("set.licenseExpiry")}</Label>
+   344→              <Input type="date" value={s?.licenseExpiry ? String(s.licenseExpiry).slice(0, 10) : ""} onChange={(e) => setS({ ...s, licenseExpiry: e.target.value })} className="mt-1 h-9" />
+   345→            </div>
+   346→            <TextField label={t("app.phone")} field="phone" dir="ltr" />
+   347→            <TextField label={t("app.email")} field="email" dir="ltr" />
+   348→            <div className="md:col-span-2"><Label className="text-xs">{t("app.address")}</Label><Textarea rows={2} value={s?.address ?? ""} onChange={(e) => setS({ ...s, address: e.target.value })} className="mt-1" /></div>
+   349→          </CardContent></Card>
+   350→        </TabsContent>
+   351→
+   352→        {/* ─── الفروع ─── */}
+   353→        <TabsContent value="branches">
+   354→          <Card><CardContent className="p-4 space-y-2">
+   355→            {branches.map((b) => (
+   356→              <div key={b.id} className="flex flex-wrap items-center gap-2 p-3 rounded-lg border">
+   357→                <div className="flex-1 min-w-48">
+   358→                  <p className="font-semibold text-sm">{lang === "AR" ? b.name : b.nameEn}</p>
+   359→                  <p className="text-xs text-muted-foreground font-mono" dir="ltr">{b.code} • {b.address || ""}</p>
+   360→                </div>
+   361→                {b.isDefault && <Badge className="bg-emerald-600 border-0">{lang === "AR" ? "الرئيسي" : "Main"}</Badge>}
+   362→                <Badge variant={b.isActive ? "secondary" : "destructive"}>{b.isActive ? t("app.active") : t("app.inactive")}</Badge>
+   363→                <Badge variant="outline">{fmtQ(b._count?.users || 0)} {lang === "AR" ? "مستخدم" : "users"}</Badge>
+   364→                <div className="flex gap-1.5">
+   365→                  {!b.isDefault && (
+   366→                    <>
+   367→                      <Button size="sm" variant="outline" onClick={() => saveBranch({ id: b.id, isActive: !b.isActive })}>
+   368→                        {b.isActive ? t("app.inactive") : t("app.active")}
+   369→                      </Button>
+   370→                      <Button size="sm" variant="outline" onClick={() => saveBranch({ id: b.id, isDefault: true })}>
+   371→                        {lang === "AR" ? "تعيين رئيسي" : "Set Main"}
+   372→                      </Button>
+   373→                    </>
+   374→                  )}
+   375→                </div>
+   376→              </div>
+   377→            ))}
+   378→          </CardContent></Card>
+   379→        </TabsContent>
+   380→
+   381→        {/* ─── المستخدمون والصلاحيات ─── */}
+   382→        <TabsContent value="users">
+   383→          <div className="space-y-4">
+   384→            <Card>
+   385→              <CardHeader className="flex-row items-center justify-between pb-3">
+   386→                <CardTitle className="text-base flex items-center gap-2"><Users className="h-5 w-5 text-primary" /> {t("set.users")}</CardTitle>
+   387→                <Button size="sm" onClick={() => setUserDialog(true)} className="gap-1.5"><Plus className="h-4 w-4" /> {t("set.addUser")}</Button>
+   388→              </CardHeader>
+   389→              <CardContent className="p-0">
+   390→                <div className="overflow-x-auto">
+   391→                  <Table>
+   392→                    <TableHeader>
+   393→                      <TableRow>
+   394→                        <TableHead>{t("set.username")}</TableHead>
+   395→                        <TableHead>{t("app.nameLabel")}</TableHead>
+   396→                        <TableHead>{t("set.role")}</TableHead>
+   397→                        <TableHead>{t("set.quickPin")}</TableHead>
+   398→                        <TableHead>{t("app.branch")}</TableHead>
+   399→                        <TableHead>{lang === "AR" ? "آخر دخول" : "Last Login"}</TableHead>
+   400→                        <TableHead>{t("app.status")}</TableHead>
+   401→                        <TableHead></TableHead>
+   402→                      </TableRow>
+   403→                    </TableHeader>
+   404→                    <TableBody>
+   405→                      {users.map((u) => (
+   406→                        <TableRow key={u.id}>
+   407→                          <TableCell className="font-mono text-sm" dir="ltr">{u.username}</TableCell>
+   408→                          <TableCell className="text-sm">{u.fullName}</TableCell>
+   409→                          <TableCell><Badge variant="secondary">{t(`role.${u.role}`)}</Badge></TableCell>
+   410→                          <TableCell className="font-mono text-xs" dir="ltr">
+   411→                            {u.pin ? (showPins ? u.pin : "••••") : "—"}
+   412→                          </TableCell>
+   413→                          <TableCell className="text-xs">{lang === "AR" ? u.branch?.name : u.branch?.nameEn || "—"}</TableCell>
+   414→                          <TableCell className="text-xs">{u.lastLoginAt ? fmtDate(u.lastLoginAt, lang, true) : "—"}</TableCell>
+   415→                          <TableCell><Badge variant={u.isActive ? "secondary" : "destructive"}>{u.isActive ? t("app.active") : t("app.inactive")}</Badge></TableCell>
+   416→                          <TableCell className="text-end">
+   417→                            <div className="flex justify-end gap-1">
+   418→                              <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setShowPins(!showPins)} aria-label="show pin">
+   419→                                {showPins ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+   420→                              </Button>
+   421→                              <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" onClick={() => toggleUser(u)} aria-label="toggle">
+   422→                                <Lock className="h-4 w-4" />
+   423→                              </Button>
+   424→                            </div>
+   425→                          </TableCell>
+   426→                        </TableRow>
+   427→                      ))}
+   428→                    </TableBody>
+   429→                  </Table>
+   430→                </div>
+   431→              </CardContent>
+   432→            </Card>
+   433→
+   434→            <Card>
+   435→              <CardHeader className="pb-2">
+   436→                <CardTitle className="text-base flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-primary" /> {t("set.permissions")}</CardTitle>
+   437→              </CardHeader>
+   438→              <CardContent>
+   439→                <p className="text-xs text-muted-foreground mb-3">{lang === "AR" ? "الصلاحيات مطبقة على مستوى الخادم (RBAC) لكل شاشة:" : "Server-enforced RBAC per screen:"}</p>
+   440→                <div className="overflow-x-auto">
+   441→                  <Table>
+   442→                    <TableHeader>
+   443→                      <TableRow>
+   444→                        <TableHead>{lang === "AR" ? "الشاشة" : "Screen"}</TableHead>
+   445→                        <TableHead>{t("role.ADMIN")}</TableHead>
+   446→                        <TableHead>{t("role.PHARMACIST")}</TableHead>
+   447→                        <TableHead>{t("role.CASHIER")}</TableHead>
+   448→                        <TableHead>{t("role.ACCOUNTANT")}</TableHead>
+   449→                        <TableHead>{t("role.INVENTORY_MANAGER")}</TableHead>
+   450→                      </TableRow>
+   451→                    </TableHeader>
+   452→                    <TableBody>
+   453→                      {MODULES.map((m) => {
+   454→                        const permMatrix: Record<string, string[]> = {
+   455→                          dashboard: ["ADMIN", "PHARMACIST", "CASHIER", "ACCOUNTANT", "INVENTORY_MANAGER"],
+   456→                          pos: ["ADMIN", "PHARMACIST", "CASHIER"],
+   457→                          products: ["ADMIN", "PHARMACIST", "INVENTORY_MANAGER", "CASHIER"],
+   458→                          inventory: ["ADMIN", "PHARMACIST", "INVENTORY_MANAGER"],
+   459→                          prescriptions: ["ADMIN", "PHARMACIST", "CASHIER"],
+   460→                          customers: ["ADMIN", "PHARMACIST", "CASHIER", "ACCOUNTANT"],
+   461→                          suppliers: ["ADMIN", "INVENTORY_MANAGER", "ACCOUNTANT", "PHARMACIST"],
+   462→                          finance: ["ADMIN", "ACCOUNTANT", "CASHIER"],
+   463→                          hr: ["ADMIN", "ACCOUNTANT"],
+   464→                          reports: ["ADMIN", "PHARMACIST", "ACCOUNTANT", "INVENTORY_MANAGER"],
+   465→                          settings: ["ADMIN"],
+   466→                        };
+   467→                        return (
+   468→                          <TableRow key={m}>
+   469→                            <TableCell className="text-sm font-medium">{t(`nav.${m}`)}</TableCell>
+   470→                            {["ADMIN", "PHARMACIST", "CASHIER", "ACCOUNTANT", "INVENTORY_MANAGER"].map((r) => (
+   471→                              <TableCell key={r} className="text-center">
+   472→                                {(permMatrix[m] || []).includes(r) ? (
+   473→                                  <span className="text-emerald-600">✓</span>
+   474→                                ) : (
+   475→                                  <span className="text-muted-foreground/40">—</span>
+   476→                                )}
+   477→                              </TableCell>
+   478→                            ))}
+   479→                          </TableRow>
+   480→                        );
+   481→                      })}
+   482→                    </TableBody>
+   483→                  </Table>
+   484→                </div>
+   485→              </CardContent>
+   486→            </Card>
+   487→          </div>
+   488→        </TabsContent>
+   489→
+   490→        {/* ─── الفواتير والضرائب ─── */}
+   491→        <TabsContent value="invoices">
+   492→          <Card><CardContent className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+   493→            <TextField label={t("set.invoicePrefix")} field="invoicePrefix" dir="ltr" />
+   494→            <TextField label={t("set.defaultTaxRate")} field="defaultTaxRate" type="number" />
+   495→            <TextField label={t("set.invoiceHeader")} field="invoiceHeader" />
+   496→            <TextField label={t("set.invoiceFooter")} field="invoiceFooter" />
+   497→            <div className="md:col-span-2"><Label className="text-xs">{t("set.invoiceTerms")}</Label><Textarea rows={2} value={s?.invoiceTerms ?? ""} onChange={(e) => setS({ ...s, invoiceTerms: e.target.value })} className="mt-1" /></div>
+   498→          </CardContent></Card>
+   499→        </TabsContent>
+   500→
+   501→        {/* ─── POS ─── */}
+   502→        <TabsContent value="pos">
+   503→          <Card><CardContent className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+   504→            <div>
+   505→              <Label className="text-xs">{t("set.defaultPayment")}</Label>
+   506→              <Select value={s?.defaultPaymentMethod || "CASH"} onValueChange={(v) => setS({ ...s, defaultPaymentMethod: v })}>
+   507→                <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+   508→                <SelectContent>
+   509→                  <SelectItem value="CASH">{t("pos.pay.cash")}</SelectItem>
+   510→                  <SelectItem value="VISA">{t("pos.pay.visa")}</SelectItem>
+   511→                  <SelectItem value="WALLET">{t("pos.pay.wallet")}</SelectItem>
+   512→                  <SelectItem value="CREDIT">{t("pos.pay.credit")}</SelectItem>
+   513→                  <SelectItem value="INSURANCE">{t("pos.pay.insurance")}</SelectItem>
+   514→                </SelectContent>
+   515→              </Select>
+   516→            </div>
+   517→            <div>
+   518→              <Label className="text-xs">{t("set.printerType")}</Label>
+   519→              <Select value={s?.printerType || "THERMAL"} onValueChange={(v) => setS({ ...s, printerType: v })}>
+   520→                <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+   521→                <SelectContent>
+   522→                  <SelectItem value="THERMAL">{t("set.thermal")}</SelectItem>
+   523→                  <SelectItem value="A4">A4 / PDF</SelectItem>
+   524→                </SelectContent>
+   525→              </Select>
+   526→            </div>
+   527→            <TextField label={t("set.loyaltyEarnRate")} field="loyaltyEarnRate" type="number" />
+   528→            <TextField label={t("set.loyaltyRedeemRate")} field="loyaltyRedeemRate" type="number" />
+   529→            <TextField label={t("set.cashierMaxDiscount")} field="cashierMaxDiscount" type="number" />
+   530→            <SwitchField label={t("set.loyaltyEnabled")} field="loyaltyEnabled" />
+   531→          </CardContent></Card>
+   532→        </TabsContent>
+   533→
+   534→        {/* ─── المخزون والتنبيهات ─── */}
+   535→        <TabsContent value="inventory">
+   536→          <Card><CardContent className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+   537→            <TextField label={t("set.defaultReorderPoint")} field="defaultReorderPoint" type="number" />
+   538→            <TextField label={t("set.expiryAlertDays")} field="expiryAlertDays" />
+   539→            <div>
+   540→              <Label className="text-xs">{t("set.stockMethod")}</Label>
+   541→              <Select value={s?.stockMethod || "FEFO"} onValueChange={(v) => setS({ ...s, stockMethod: v })}>
+   542→                <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+   543→                <SelectContent>
+   544→                  <SelectItem value="FEFO">FEFO</SelectItem>
+   545→                  <SelectItem value="FIFO">FIFO</SelectItem>
+   546→                  <SelectItem value="AVG">{lang === "AR" ? "متوسط مرجح" : "Weighted Average"}</SelectItem>
+   547→                </SelectContent>
+   548→              </Select>
+   549→            </div>
+   550→            <SwitchField label={t("set.alertLowStock")} field="alertLowStock" />
+   551→            <SwitchField label={t("set.alertExpiry")} field="alertExpiry" />
+   552→            <SwitchField label={t("set.alertPendingRx")} field="alertPendingRx" />
+   553→          </CardContent></Card>
+   554→        </TabsContent>
+   555→
+   556→        {/* ─── الإشعارات ─── */}
+   557→        <TabsContent value="notifications">
+   558→          <Card><CardContent className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+   559→            <SwitchField label={t("set.notifyInApp")} field="notifyInApp" />
+   560→            <SwitchField label={t("set.notifyEmail")} field="notifyEmail" />
+   561→            <SwitchField label={t("set.notifySms")} field="notifySms" />
+   562→            <SwitchField label={t("set.notifyWhatsapp")} field="notifyWhatsapp" />
+   563→            <TextField label={`${t("set.tab.notifications")} — ${lang === "AR" ? "بريد التقارير التلقائية" : "Auto reports email"}`} field="autoReportsEmail" dir="ltr" />
+   564→          </CardContent></Card>
+   565→        </TabsContent>
+   566→
+   567→        {/* ─── النسخ الاحتياطي ─── */}
+   568→        <TabsContent value="backup" className="space-y-4">
+   569→          <Card><CardContent className="p-4 space-y-4">
+   570→            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+   571→              <div>
+   572→                <Label className="text-xs">{t("set.backupSchedule")}</Label>
+   573→                <Select value={s?.backupSchedule || "DAILY"} onValueChange={(v) => setS({ ...s, backupSchedule: v })}>
+   574→                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+   575→                  <SelectContent>
+   576→                    <SelectItem value="MANUAL">{t("set.manual")}</SelectItem>
+   577→                    <SelectItem value="DAILY">{t("set.daily")}</SelectItem>
+   578→                    <SelectItem value="WEEKLY">{t("set.weekly")}</SelectItem>
+   579→                  </SelectContent>
+   580→                </Select>
+   581→              </div>
+   582→              <div>
+   583→                <Label className="text-xs">{t("set.backupLocation")}</Label>
+   584→                <Select value={s?.backupLocation || "LOCAL"} onValueChange={(v) => setS({ ...s, backupLocation: v })}>
+   585→                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+   586→                  <SelectContent>
+   587→                    <SelectItem value="LOCAL">{t("set.local")}</SelectItem>
+   588→                    <SelectItem value="CLOUD">{t("set.cloud")} (S3 / Drive)</SelectItem>
+   589→                  </SelectContent>
+   590→                </Select>
+   591→              </div>
+   592→            </div>
+   593→            <div className="flex flex-wrap items-center gap-3 p-3 rounded-lg border bg-muted/40">
+   594→              <DatabaseBackup className="h-8 w-8 text-primary" />
+   595→              <div className="flex-1">
+   596→                <p className="text-sm font-semibold">{t("set.lastBackup")}</p>
+   597→                <p className="text-xs text-muted-foreground">{s?.lastBackupAt ? fmtDate(s.lastBackupAt, lang, true) : "—"}</p>
+   598→              </div>
+   599→              <Button onClick={runBackup} disabled={bkBusy} className="gap-2"><DatabaseBackup className="h-4 w-4" /> {t("set.runBackup")}</Button>
+   600→            </div>
+   601→            {bkSummary && (
+   602→              <div className="grid grid-cols-3 gap-2">
+   603→                <div className="p-2.5 rounded-lg border text-center">
+   604→                  <p className="text-lg font-bold">{fmtQ(bkSummary.count)}</p>
+   605→                  <p className="text-[11px] text-muted-foreground">{t("set.bk.count")}</p>
+   606→                </div>
+   607→                <div className="p-2.5 rounded-lg border text-center">
+   608→                  <p className="text-lg font-bold">{fmtSize(bkSummary.totalBytes)}</p>
+   609→                  <p className="text-[11px] text-muted-foreground">{t("set.bk.totalSize")}</p>
+   610→                </div>
+   611→                <div className="p-2.5 rounded-lg border text-center">
+   612→                  <p className="text-[11px] font-mono break-all" dir="ltr">{bkSummary.dir}</p>
+   613→                  <p className="text-[11px] text-muted-foreground">{t("set.bk.dir")}</p>
+   614→                </div>
+   615→              </div>
+   616→            )}
+   617→            <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+   618→              <History className="h-3.5 w-3.5" />
+   619→              {lang === "AR" ? "كل تعديل للإعدادات يُحفظ نسخة منه تلقائياً — يمكنك التراجع من زر «التراجع لآخر إعداد» أعلى الشاشة." : "Every settings change is snapshotted — use Rollback above to revert."}
+   620→            </p>
+   621→          </CardContent></Card>
+   622→
+   623→          {/* قائمة النسخ المحفوظة */}
+   624→          <Card>
+   625→            <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><HardDriveDownload className="h-4 w-4 text-primary" /> {t("set.bk.list")}</CardTitle></CardHeader>
+   626→            <CardContent>
+   627→              {backups.length === 0 ? (
+   628→                <EmptyState icon={DatabaseBackup} message={t("set.bk.empty")} />
+   629→              ) : (
+   630→                <Table>
+   631→                  <TableHeader>
+   632→                    <TableRow>
+   633→                      <TableHead>{t("set.bk.name")}</TableHead>
+   634→                      <TableHead className="w-24">{t("set.bk.size")}</TableHead>
+   635→                      <TableHead className="w-44">{t("set.bk.date")}</TableHead>
+   636→                      <TableHead className="w-56 text-end">{t("set.bk.actions")}</TableHead>
+   637→                    </TableRow>
+   638→                  </TableHeader>
+   639→                  <TableBody>
+   640→                    {backups.map((b) => (
+   641→                      <TableRow key={b.name}>
+   642→                        <TableCell className="font-mono text-xs" dir="ltr">{b.name}</TableCell>
+   643→                        <TableCell className="text-xs">{fmtSize(b.sizeBytes)}</TableCell>
+   644→                        <TableCell className="text-xs text-muted-foreground">{fmtDate(b.createdAt, lang, true)}</TableCell>
+   645→                        <TableCell className="text-end">
+   646→                          <div className="flex justify-end gap-1.5">
+   647→                            <Button size="sm" variant="default" disabled={bkBusy} onClick={() => setConfirmRestore(b.name)} className="gap-1 h-8">
+   648→                              <History className="h-3.5 w-3.5" /> {t("set.bk.restore")}
+   649→                            </Button>
+   650→                            <Button size="sm" variant="outline" onClick={() => downloadBackup(b.name)} className="gap-1 h-8">
+   651→                              <Download className="h-3.5 w-3.5" /> {t("set.bk.download")}
+   652→                            </Button>
+   653→                            <Button size="sm" variant="outline" disabled={bkBusy} onClick={() => setConfirmDelete(b.name)} className="gap-1 h-8 text-destructive hover:text-destructive">
+   654→                              <Trash2 className="h-3.5 w-3.5" />
+   655→                            </Button>
+   656→                          </div>
+   657→                        </TableCell>
+   658→                      </TableRow>
+   659→                    ))}
+   660→                  </TableBody>
+   661→                </Table>
+   662→              )}
+   663→            </CardContent>
+   664→          </Card>
+   665→
+   666→          {/* تأكيد الاستعادة */}
+   667→          <AlertDialog open={!!confirmRestore} onOpenChange={(o) => !o && setConfirmRestore(null)}>
+   668→            <AlertDialogContent>
+   669→              <AlertDialogHeader>
+   670→                <AlertDialogTitle className="flex items-center gap-2"><History className="h-5 w-5 text-amber-500" /> {t("set.bk.restoreTitle")}</AlertDialogTitle>
+   671→                <AlertDialogDescription>
+   672→                  <span className="block font-mono text-xs" dir="ltr">{confirmRestore}</span>
+   673→                  {t("set.bk.restoreDesc")}
+   674→                  <span className="block mt-2 flex items-center gap-1.5 text-emerald-600 font-medium"><ShieldCheck className="h-3.5 w-3.5" /> {t("set.bk.restoreNoRestart")}</span>
+   675→                </AlertDialogDescription>
+   676→              </AlertDialogHeader>
+   677→              <AlertDialogFooter>
+   678→                <AlertDialogCancel>{t("app.cancel")}</AlertDialogCancel>
+   679→                <AlertDialogAction onClick={doRestore} disabled={bkBusy}>{t("set.bk.restore")}</AlertDialogAction>
+   680→              </AlertDialogFooter>
+   681→            </AlertDialogContent>
+   682→          </AlertDialog>
+   683→
+   684→          {/* تأكيد الحذف */}
+   685→          <AlertDialog open={!!confirmDelete} onOpenChange={(o) => !o && setConfirmDelete(null)}>
+   686→            <AlertDialogContent>
+   687→              <AlertDialogHeader>
+   688→                <AlertDialogTitle className="flex items-center gap-2"><Trash2 className="h-5 w-5 text-destructive" /> {t("set.bk.deleteTitle")}</AlertDialogTitle>
+   689→                <AlertDialogDescription>
+   690→                  <span className="block font-mono text-xs" dir="ltr">{confirmDelete}</span>
+   691→                  {t("set.bk.deleteDesc")}
+   692→                </AlertDialogDescription>
+   693→              </AlertDialogHeader>
+   694→              <AlertDialogFooter>
+   695→                <AlertDialogCancel>{t("app.cancel")}</AlertDialogCancel>
+   696→                <AlertDialogAction onClick={doDeleteBackup} disabled={bkBusy} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">{t("app.delete")}</AlertDialogAction>
+   697→              </AlertDialogFooter>
+   698→            </AlertDialogContent>
+   699→          </AlertDialog>
+   700→        </TabsContent>
+   701→
+   702→        {/* ─── التكاملات ─── */}
+   703→        <TabsContent value="integrations">
+   704→          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+   705→            <Card>
+   706→              <CardHeader className="pb-2"><CardTitle className="text-sm">{t("set.paymentGateways")}</CardTitle></CardHeader>
+   707→              <CardContent className="space-y-3">
+   708→                <TextField label="Stripe — Publishable Key" field="stripeKey" dir="ltr" />
+   709→                <TextField label="Paymob — API Key" field="paymobKey" dir="ltr" />
+   710→              </CardContent>
+   711→            </Card>
+   712→            <Card>
+   713→              <CardHeader className="pb-2"><CardTitle className="text-sm">{t("set.eta")}</CardTitle></CardHeader>
+   714→              <CardContent className="space-y-3">
+   715→                <TextField label="ETA Client ID" field="etaClientId" dir="ltr" />
+   716→                <TextField label="ETA Secret" field="etaSecret" dir="ltr" type="password" />
+   717→              </CardContent>
+   718→            </Card>
+   719→            <Card>
+   720→              <CardHeader className="pb-2"><CardTitle className="text-sm">{t("set.messaging")}</CardTitle></CardHeader>
+   721→              <CardContent className="space-y-3">
+   722→                <TextField label="WhatsApp API Token" field="whatsappToken" dir="ltr" type="password" />
+   723→                <TextField label="SMS Provider" field="smsProvider" dir="ltr" />
+   724→              </CardContent>
+   725→            </Card>
+   726→            <Card>
+   727→              <CardHeader className="pb-2"><CardTitle className="text-sm">{t("set.devices")}</CardTitle></CardHeader>
+   728→              <CardContent className="space-y-3">
+   729→                <div className="flex items-center justify-between p-2.5 rounded-lg border"><span className="text-sm flex items-center gap-2"><ScanBarcode className="h-4 w-4 text-primary" /> {t("set.barcodeScanner")}</span><Badge className="bg-emerald-600 border-0">{lang === "AR" ? "متصل" : "Connected"}</Badge></div>
+   730→                <div className="flex items-center justify-between p-2.5 rounded-lg border"><span className="text-sm flex items-center gap-2"><ScanBarcode className="h-4 w-4 text-primary" /> {t("set.cashDrawer")}</span><Badge variant="outline">{lang === "AR" ? "ESC/POS" : "ESC/POS"}</Badge></div>
+   731→              </CardContent>
+   732→            </Card>
+   733→          </div>
+   734→        </TabsContent>
+   735→
+   736→        {/* ─── المظهر واللغة ─── */}
+   737→        <TabsContent value="appearance">
+   738→          <Card><CardContent className="p-4 space-y-4">
+   739→            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+   740→              <div>
+   741→                <Label className="text-xs">{t("set.theme")}</Label>
+   742→                <Select value={theme} onValueChange={(v) => { setTheme(v as any); document.documentElement.classList.toggle("dark", v === "dark"); }}>
+   743→                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+   744→                  <SelectContent>
+   745→                    <SelectItem value="light">{t("set.light")}</SelectItem>
+   746→                    <SelectItem value="dark">{t("set.dark")}</SelectItem>
+   747→                    <SelectItem value="system">{t("set.system")}</SelectItem>
+   748→                  </SelectContent>
+   749→                </Select>
+   750→              </div>
+   751→              <div>
+   752→                <Label className="text-xs">{t("set.language")}</Label>
+   753→                <Select value={lang} onValueChange={(v) => setLang(v as any)}>
+   754→                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+   755→                  <SelectContent>
+   756→                    <SelectItem value="AR">{lang === "AR" ? "العربية (RTL)" : "Arabic (RTL)"}</SelectItem>
+   757→                    <SelectItem value="EN">English (LTR)</SelectItem>
+   758→                  </SelectContent>
+   759→                </Select>
+   760→              </div>
+   761→              <div>
+   762→                <Label className="text-xs">{t("set.primaryColor")}</Label>
+   763→                <Select value={s?.primaryColor || "emerald"} onValueChange={(v) => setS({ ...s, primaryColor: v })}>
+   764→                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+   765→                  <SelectContent>
+   766→                    <SelectItem value="emerald"><span className="inline-block h-3 w-3 rounded-full bg-emerald-600 me-2" />Emerald</SelectItem>
+   767→                    <SelectItem value="teal"><span className="inline-block h-3 w-3 rounded-full bg-teal-600 me-2" />Teal</SelectItem>
+   768→                  </SelectContent>
+   769→                </Select>
+   770→              </div>
+   771→            </div>
+   772→          </CardContent></Card>
+   773→        </TabsContent>
+   774→
+   775→        {/* ─── البيانات الأساسية ─── */}
+   776→        <TabsContent value="master">
+   777→          <Tabs defaultValue="manufacturers" dir={lang === "AR" ? "rtl" : "ltr"}>
+   778→            <TabsList className="flex-wrap h-auto">
+   779→              {MD_TABS.map((tb) => <TabsTrigger key={tb.key} value={tb.key}>{tb.label}</TabsTrigger>)}
+   780→            </TabsList>
+   781→            {MD_TABS.map((tb) => (
+   782→              <TabsContent key={tb.key} value={tb.key}>
+   783→                <Card>
+   784→                  <CardHeader className="flex-row items-center justify-between pb-3">
+   785→                    <CardTitle className="text-base">{tb.label}</CardTitle>
+   786→                    <Button size="sm" className="gap-1.5" onClick={() => { setMdForm({ name: "", nameEn: "", country: "", price: "", code: "", type: "PERCENT", value: "" }); setMdDialog({ entity: tb.key }); }}>
+   787→                      <Plus className="h-4 w-4" /> {t("app.add")}
+   788→                    </Button>
+   789→                  </CardHeader>
+   790→                  <CardContent className="p-0">
+   791→                    {(md?.[tb.key] || []).length === 0 ? (
+   792→                      <EmptyState message={t("app.noData")} />
+   793→                    ) : (
+   794→                      <div className="overflow-x-auto">
+   795→                        <Table>
+   796→                          <TableHeader>
+   797→                            <TableRow>
+   798→                              <TableHead>{t("app.nameLabel")}</TableHead>
+   799→                              <TableHead>{t("set.nameEn")}</TableHead>
+   800→                              {tb.key === "manufacturers" && <TableHead>{t("prod.origin")}</TableHead>}
+   801→                              {tb.key === "services" && <TableHead className="text-end">{t("app.price")}</TableHead>}
+   802→                              {tb.key === "coupons" && (
+   803→                                <>
+   804→                                  <TableHead>{t("app.type")}</TableHead>
+   805→                                  <TableHead className="text-end">{t("app.total")}</TableHead>
+   806→                                </>
+   807→                              )}
+   808→                              <TableHead></TableHead>
+   809→                            </TableRow>
+   810→                          </TableHeader>
+   811→                          <TableBody>
+   812→                            {(md?.[tb.key] || []).map((r: any) => (
+   813→                              <TableRow key={r.id}>
+   814→                                <TableCell className="text-sm font-medium">
+   815→                                  {tb.key === "coupons" ? <span className="font-mono" dir="ltr">{r.code}</span> : r.name}
+   816→                                </TableCell>
+   817→                                <TableCell className="text-xs">{r.nameEn || "—"}</TableCell>
+   818→                                {tb.key === "manufacturers" && <TableCell className="text-xs">{r.country || "—"}</TableCell>}
+   819→                                {tb.key === "services" && <TableCell className="text-end font-bold">{r.price}</TableCell>}
+   820→                                {tb.key === "coupons" && (
+   821→                                  <>
+   822→                                    <TableCell><Badge variant="outline">{r.type === "PERCENT" ? "٪" : t("pos.fixed")}</Badge></TableCell>
+   823→                                    <TableCell className="text-end font-bold">{r.value}</TableCell>
+   824→                                  </>
+   825→                                )}
+   826→                                <TableCell className="text-end">
+   827→                                  <Button
+   828→                                    size="icon"
+   829→                                    variant="ghost"
+   830→                                    className="h-7 w-7 text-destructive"
+   831→                                    onClick={() => deleteMd(tb.key, r.id)}
+   832→                                    aria-label="delete"
+   833→                                  >
+   834→                                    <Trash2 className="h-3.5 w-3.5" />
+   835→                                  </Button>
+   836→                                </TableCell>
+   837→                              </TableRow>
+   838→                            ))}
+   839→                          </TableBody>
+   840→                        </Table>
+   841→                      </div>
+   842→                    )}
+   843→                  </CardContent>
+   844→                </Card>
+   845→              </TabsContent>
+   846→            ))}
+   847→          </Tabs>
+   848→        </TabsContent>
+   849→
+   850→        {/* ─── سجل النشاط ─── */}
+   851→        <TabsContent value="logs">
+   852→          <Card>
+   853→            <CardHeader className="pb-3">
+   854→              <CardTitle className="text-base flex items-center gap-2"><ScrollText className="h-5 w-5 text-primary" /> {t("set.tab.logs")}</CardTitle>
+   855→              <p className="text-xs text-muted-foreground">{t("set.logsHint")}</p>
+   856→            </CardHeader>
+   857→            <CardContent className="p-0">
+   858→              {auditLogs.length === 0 ? (
+   859→                <EmptyState message={t("set.noLogs")} icon={ScrollText} />
+   860→              ) : (
+   861→                <div className="overflow-x-auto">
+   862→                  <Table>
+   863→                    <TableHeader>
+   864→                      <TableRow>
+   865→                        <TableHead>{t("app.date")}</TableHead>
+   866→                        <TableHead>{lang === "AR" ? "المستخدم" : "User"}</TableHead>
+   867→                        <TableHead>{lang === "AR" ? "الإجراء" : "Action"}</TableHead>
+   868→                        <TableHead>{lang === "AR" ? "الكيان" : "Entity"}</TableHead>
+   869→                        <TableHead>{t("app.notes")}</TableHead>
+   870→                      </TableRow>
+   871→                    </TableHeader>
+   872→                    <TableBody>
+   873→                      {auditLogs.map((log) => (
+   874→                        <TableRow key={log.id}>
+   875→                          <TableCell className="text-xs whitespace-nowrap">{fmtDate(log.createdAt, lang, true)}</TableCell>
+   876→                          <TableCell className="text-xs font-medium">{log.userName || "—"}</TableCell>
+   877→                          <TableCell><Badge variant="outline" className="font-mono text-[10px]" dir="ltr">{log.action}</Badge></TableCell>
+   878→                          <TableCell className="text-xs">{log.entity}</TableCell>
+   879→                          <TableCell className="text-xs text-muted-foreground max-w-72 truncate">{log.details || "—"}</TableCell>
+   880→                        </TableRow>
+   881→                      ))}
+   882→                    </TableBody>
+   883→                  </Table>
+   884→                </div>
+   885→              )}
+   886→              <div className="px-4 pb-3">
+   887→                <Pagination page={auditPage} pageSize={25} total={auditTotal} onPage={loadAudit} />
+   888→              </div>
+   889→            </CardContent>
+   890→          </Card>
+   891→        </TabsContent>
+   892→      </Tabs>
+   893→
+   894→      {/* مستخدم جديد */}
+   895→      <Dialog open={userDialog} onOpenChange={setUserDialog}>
+   896→        <DialogContent className="max-w-md">
+   897→          <DialogHeader><DialogTitle className="flex items-center gap-2"><Users className="h-5 w-5 text-primary" /> {t("set.addUser")}</DialogTitle></DialogHeader>
+   898→          <div className="grid grid-cols-2 gap-3">
+   899→            <div><Label>{t("set.username")} *</Label><Input dir="ltr" value={userForm.username} onChange={(e) => setUserForm({ ...userForm, username: e.target.value })} className="mt-1" /></div>
+   900→            <div><Label>{t("set.newPassword")} *</Label><Input dir="ltr" type="password" value={userForm.password} onChange={(e) => setUserForm({ ...userForm, password: e.target.value })} className="mt-1" /></div>
+   901→            <div className="col-span-2"><Label>{t("app.nameLabel")} *</Label><Input value={userForm.fullName} onChange={(e) => setUserForm({ ...userForm, fullName: e.target.value })} className="mt-1" /></div>
+   902→            <div>
+   903→              <Label>{t("set.role")}</Label>
+   904→              <Select value={userForm.role} onValueChange={(v) => setUserForm({ ...userForm, role: v })}>
+   905→                <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+   906→                <SelectContent>
+   907→                  {["ADMIN", "PHARMACIST", "CASHIER", "ACCOUNTANT", "INVENTORY_MANAGER"].map((r) => (
+   908→                    <SelectItem key={r} value={r}>{t(`role.${r}`)}</SelectItem>
+   909→                  ))}
+   910→                </SelectContent>
+   911→              </Select>
+   912→            </div>
+   913→            <div><Label>{t("set.quickPin")}</Label><Input dir="ltr" maxLength={4} value={userForm.pin} onChange={(e) => setUserForm({ ...userForm, pin: e.target.value.replace(/\D/g, "") })} className="mt-1" placeholder="1234" /></div>
+   914→            <div><Label>{t("app.phone")}</Label><Input dir="ltr" value={userForm.phone} onChange={(e) => setUserForm({ ...userForm, phone: e.target.value })} className="mt-1" /></div>
+   915→            <div>
+   916→              <Label>{t("app.branch")}</Label>
+   917→              <Select value={userForm.branchId} onValueChange={(v) => setUserForm({ ...userForm, branchId: v })}>
+   918→                <SelectTrigger className="mt-1"><SelectValue placeholder="—" /></SelectTrigger>
+   919→                <SelectContent>
+   920→                  {branches.map((b) => <SelectItem key={b.id} value={b.id}>{lang === "AR" ? b.name : b.nameEn}</SelectItem>)}
+   921→                </SelectContent>
+   922→              </Select>
+   923→            </div>
+   924→          </div>
+   925→          <Button onClick={saveUser} className="w-full">{t("app.save")}</Button>
+   926→        </DialogContent>
+   927→      </Dialog>
+   928→
+   929→      {/* بيانات أساسية — إضافة */}
+   930→      <Dialog open={!!mdDialog} onOpenChange={(o) => !o && setMdDialog(null)}>
+   931→        <DialogContent className="max-w-sm">
+   932→          <DialogHeader><DialogTitle>{mdDialog?.edit ? t("app.edit") : t("app.add")}</DialogTitle></DialogHeader>
+   933→          <div className="space-y-3">
+   934→            {mdDialog?.entity !== "coupons" && (
+   935→              <>
+   936→                <div><Label>{t("app.nameLabel")} *</Label><Input value={mdForm.name} onChange={(e) => setMdForm({ ...mdForm, name: e.target.value })} className="mt-1" /></div>
+   937→                <div><Label>{t("set.nameEn")}</Label><Input dir="ltr" value={mdForm.nameEn} onChange={(e) => setMdForm({ ...mdForm, nameEn: e.target.value })} className="mt-1" /></div>
+   938→              </>
+   939→            )}
+   940→            {mdDialog?.entity === "manufacturers" && <div><Label>{t("prod.origin")}</Label><Input value={mdForm.country} onChange={(e) => setMdForm({ ...mdForm, country: e.target.value })} className="mt-1" /></div>}
+   941→            {mdDialog?.entity === "services" && <div><Label>{t("app.price")}</Label><Input type="number" value={mdForm.price} onChange={(e) => setMdForm({ ...mdForm, price: e.target.value })} className="mt-1" /></div>}
+   942→            {mdDialog?.entity === "coupons" && (
+   943→              <>
+   944→                <div><Label>{lang === "AR" ? "الكود" : "Code"} *</Label><Input dir="ltr" value={mdForm.code} onChange={(e) => setMdForm({ ...mdForm, code: e.target.value.toUpperCase() })} className="mt-1 font-mono" /></div>
+   945→                <div>
+   946→                  <Label>{t("app.type")}</Label>
+   947→                  <Select value={mdForm.type} onValueChange={(v) => setMdForm({ ...mdForm, type: v })}>
+   948→                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+   949→                    <SelectContent>
+   950→                      <SelectItem value="PERCENT">{t("pos.percent")}</SelectItem>
+   951→                      <SelectItem value="FIXED">{t("pos.fixed")}</SelectItem>
+   952→                    </SelectContent>
+   953→                  </Select>
+   954→                </div>
+   955→                <div><Label>{t("app.total")}</Label><Input type="number" value={mdForm.value} onChange={(e) => setMdForm({ ...mdForm, value: e.target.value })} className="mt-1" /></div>
+   956→              </>
+   957→            )}
+   958→            <Button onClick={saveMd} className="w-full">{t("app.save")}</Button>
+   959→          </div>
+   960→        </DialogContent>
+   961→      </Dialog>
+   962→    </div>
+   963→  );
+   964→}
+   965→
