@@ -183,7 +183,7 @@ export default function AppShell({
         {/* القسم الرئيسي */}
         <div className="flex-1 flex flex-col min-w-0">
           {/* الشريط العلوي */}
-          <header className="sticky top-0 z-40 h-14 border-b bg-background/95 backdrop-blur flex items-center gap-2 px-3 md:px-4">
+          <header className="sticky top-0 z-40 h-14 shrink-0 border-b bg-background/95 backdrop-blur flex items-center gap-2 px-3 md:px-4">
             {/* زر القائمة للجوال */}
             <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
               <SheetTrigger asChild>
@@ -316,13 +316,18 @@ export default function AppShell({
             {children}
           </main>
 
-          {/* التذييل */}
-          <footer className="h-9 border-t flex items-center justify-between px-4 text-[11px] text-muted-foreground mt-auto">
-            <span className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-              {t("nav.online")} • {lang === "AR" ? "صيدلية الشفاء" : "Al-Shifaa Pharmacy"} v1.0
+          {/* التذييل — shrink-0 يمنع انضغاطه، والاتجاهات محوّلة dir لضمان ترتيب سليم مع العربي */}
+          <footer className="h-9 shrink-0 border-t flex items-center justify-between gap-3 px-4 text-[11px] text-muted-foreground mt-auto">
+            <span className="flex items-center gap-1.5 min-w-0">
+              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+              <span className="truncate">
+                {t("nav.online")} • {lang === "AR" ? "صيدلية الشفاء" : "Al-Shifaa Pharmacy"}
+                <span dir="ltr" className="tabular-nums"> v1.0</span>
+              </span>
             </span>
-            <span>{new Date().getFullYear()} © {lang === "AR" ? "جميع الحقوق محفوظة" : "All rights reserved"}</span>
+            <span className="shrink-0 whitespace-nowrap">
+              {lang === "AR" ? "جميع الحقوق محفوظة" : "All rights reserved"} © <span dir="ltr">{new Date().getFullYear()}</span>
+            </span>
           </footer>
         </div>
       </div>

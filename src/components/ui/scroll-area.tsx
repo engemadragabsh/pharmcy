@@ -13,12 +13,14 @@ function ScrollArea({
   return (
     <ScrollAreaPrimitive.Root
       data-slot="scroll-area"
-      className={cn("relative", className)}
+      // flex-col + overflow-hidden: الجذر يحترم h-*/max-h-* ولا يترك المحتوى يفيض خارج الحاوية فوق باقي الصفحة
+      className={cn("relative flex flex-col overflow-hidden", className)}
       {...props}
     >
       <ScrollAreaPrimitive.Viewport
         data-slot="scroll-area-viewport"
-        className="focus-visible:ring-ring/50 size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:outline-1"
+        // flex-1 + min-h-0: يأخذ ارتفاع الحاوية الفعلي لا ارتفاع المحتوى — هذا ما يجعل التمرير الداخلي يعمل مع max-h-*
+        className="focus-visible:ring-ring/50 w-full flex-1 min-h-0 rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:outline-1"
       >
         {children}
       </ScrollAreaPrimitive.Viewport>
@@ -38,11 +40,11 @@ function ScrollBar({
       data-slot="scroll-area-scrollbar"
       orientation={orientation}
       className={cn(
-        "flex touch-none p-px transition-colors select-none",
+        "absolute flex touch-none p-px transition-colors select-none",
         orientation === "vertical" &&
-          "h-full w-2.5 border-l border-l-transparent",
+          "inset-y-0 end-0 w-2.5 border-l border-l-transparent",
         orientation === "horizontal" &&
-          "h-2.5 flex-col border-t border-t-transparent",
+          "inset-x-0 bottom-0 h-2.5 flex-col border-t border-t-transparent",
         className
       )}
       {...props}

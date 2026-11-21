@@ -15,7 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
 import {
-  LayoutDashboard, TrendingUp, Receipt, PackageX, CalendarClock,
+  LayoutDashboard, TrendingUp, Receipt, PackageX,
   AlertTriangle, FileText, ShoppingCart, Wallet, Activity, Stethoscope,
   Clock, RefreshCw,
 } from "lucide-react";
@@ -110,7 +110,7 @@ export default function DashboardScreen({ onNavigate }: { onNavigate: (m: string
           </Card>
         ) : (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            {[...Array(9)].map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}
+            {[...Array(8)].map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}
           </div>
         )
       ) : (
@@ -122,7 +122,6 @@ export default function DashboardScreen({ onNavigate }: { onNavigate: (m: string
             <StatCard title={t("dash.cashDrawer")} value={fmtM(data.kpis.cashInDrawer)} icon={Wallet} hint={data.openShift ? `${t("fin.status.OPEN")} • ${data.openShift.user}` : t("dash.noShift")} />
             <StatCard title={t("dash.pendingRx")} value={fmtQ(data.kpis.pendingRx)} icon={Stethoscope} tone={data.kpis.pendingRx > 0 ? "warning" : "default"} />
             <StatCard title={t("dash.lowStock")} value={fmtQ(data.kpis.lowStockCount)} icon={PackageX} tone={data.kpis.lowStockCount > 0 ? "warning" : "default"} />
-            <StatCard title={t("dash.expiring")} value={fmtQ(data.kpis.expiringCount)} icon={CalendarClock} tone={data.kpis.expiringCount > 0 ? "warning" : "default"} />
             <StatCard title={t("dash.expired")} value={fmtQ(data.kpis.expiredCount)} icon={AlertTriangle} tone={data.kpis.expiredCount > 0 ? "danger" : "default"} />
             <StatCard title={t("dash.waitingList")} value={fmtQ(data.kpis.heldInvoices)} icon={Clock} tone={data.kpis.heldInvoices > 0 ? "warning" : "default"} hint={data.kpis.heldInvoices > 0 ? (lang === "AR" ? "فواتير مؤجلة في الكاشير" : "Held invoices at POS") : undefined} />
             <StatCard title={t("dash.todayInvoices")} value={fmtQ(data.kpis.todayInvoices)} icon={FileText} />
