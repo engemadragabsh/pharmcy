@@ -5,7 +5,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { useApp } from "@/lib/store";
-import { useI18n, PageHeader, EmptyState, paymentLabel } from "./shared";
+import { useI18n, usePharmacyName, PageHeader, EmptyState, paymentLabel } from "./shared";
 import { api, exportCsv } from "@/lib/client-api";
 import { fmtMoney, fmtDate, fmtNum, todayISO } from "@/lib/format";
 import { Button } from "@/components/ui/button";
@@ -52,6 +52,7 @@ const COLUMNS: Record<string, Record<string, string>> = {
 
 export default function ReportsScreen() {
   const { t, lang } = useI18n();
+  const pharmacyName = usePharmacyName();
   const { branchId, branches } = useApp();
   const [type, setType] = useState("sales-daily");
   const [dateFrom, setDateFrom] = useState(() => {
@@ -185,8 +186,15 @@ export default function ReportsScreen() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
+      <Card className="print-area print-report">
+        {/* ترويسة الطباعة — اسم الصيدلية مصدره بيانات شاشة الإعدادات المحفوظة */}
+        <div className="hidden print:block text-center border-b border-gray-300 pb-2 pt-1">
+          <h2 className="text-lg font-bold">{pharmacyName}</h2>
+          <p className="text-xs mt-0.5">
+            {t(`rep.${type}`)} — {fmtDate(dateFrom, lang)} ← {fmtDate(dateTo, lang)}
+          </p>
+        </div>
+        <CardHeader className="print:hidden">
           <CardTitle className="text-base flex items-center gap-2">
             <TrendingUp className="h-5 w-5 text-primary" />
             {t(`rep.${type}`)} — {fmtDate(dateFrom, lang)} ← {fmtDate(dateTo, lang)}

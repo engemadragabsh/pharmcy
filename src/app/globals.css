@@ -266,6 +266,18 @@ body {
     break-after: auto !important;
     page-break-after: auto !important;
   }
+
+  /* ─── التقارير A4 متعددة الصفحات: تدفق طبيعي بدل التثبيت + هوامش ورقية ─── */
+  .print-area.print-report {
+    position: static !important;
+    inset: auto !important;
+    width: auto !important;
+    max-width: none !important;
+    padding: 8mm 10mm !important;
+  }
+  .print-report table { font-size: 11px !important; }
+  .print-report tr { break-inside: avoid !important; page-break-inside: avoid !important; }
+  .print-report thead { display: table-header-group !important; }
 }
 
 /* شريط تمرير أنيق */
