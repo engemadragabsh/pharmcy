@@ -29,6 +29,17 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+interface PosUnit {
+  id: string;
+  unitName: string;
+  unitNameEn?: string;
+  factor: number;
+  sellPrice: number;
+  barcode?: string | null;
+  isBase: boolean;
+  isDefault: boolean;
+}
+
 interface LookupItem {
   id: string;
   barcode: string;
@@ -41,6 +52,10 @@ interface LookupItem {
   requiresPrescription: boolean;
   activeIngredient?: string | null;
   availableQty: number;
+  // Multi-UoM — وحدات البيع المتاحة
+  baseUnitName?: string | null;
+  matchUnitId?: string | null;
+  units?: PosUnit[];
 }
 
 interface ServiceItem {
@@ -65,7 +80,7 @@ interface HeldInvoice {
   customer?: { name: string } | null;
   total: number;
   heldAt: string;
-  items: Array<{ productId?: string; name: string; qty: number; unitPrice: number; discount: number; taxRate: number }>;
+  items: Array<{ productId?: string; name: string; qty: number; unitPrice: number; discount: number; taxRate: number; unitId?: string | null; unitName?: string | null; unitFactor?: number | null }>;
 }
 
 interface PendingRx {
@@ -86,7 +101,7 @@ const PAYMENTS = [
 
 export default function POSScreen() {
   const { t, lang } = useI18n();
-  const { cart, addToCart, updateCartQty, updateCartDiscount, removeFromCart, clearCart, branchId, branches, settings } = useApp();
+  const { cart, addToCart, updateCartQty, updateCartDiscount, updateCartItem, removeFromCart, clearCart, branchId, branches, settings } = useApp();
 
   const searchRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
@@ -206,26 +221,65 @@ export default function POSScreen() {
   };
 
   // ─── السلة ───
+  // تحديد وحدة البيع: وحدة مطابقة بالباركود ← الافتراضية ← الأساسية ← بلا (factor 1)
+  const resolveUnit = (item: LookupItem): PosUnit | null => {
+    const units = item.units || [];
+    if (units.length === 0) return null;
+    return (
+      (item.matchUnitId && units.find((u) => u.id === item.matchUnitId)) ||
+      units.find((u) => u.isDefault) ||
+      units.find((u) => u.isBase) ||
+      null
+    );
+  };
+
   const handleAddToCart = (item: LookupItem) => {
     if (item.availableQty <= 0) {
       toast.error(t("pos.outOfStock"));
       return;
     }
+    const unit = resolveUnit(item);
+    const factor = unit && unit.factor > 0 ? unit.factor : 1;
+    const unitPrice = unit ? unit.sellPrice : item.sellPrice;
+    const units = item.units || [];
     addToCart({
       productId: item.id,
       name: lang === "AR" ? item.tradeName : item.tradeNameEn || item.tradeName,
       nameEn: item.tradeNameEn,
       qty: 1,
-      unitPrice: item.sellPrice,
+      unitPrice,
       taxRate: item.taxRate,
-      availableQty: item.availableQty,
+      availableQty: Math.floor(item.availableQty / factor),
       requiresPrescription: item.requiresPrescription,
+      unitId: unit?.id,
+      unitName: unit?.unitName,
+      unitFactor: unit ? factor : undefined,
+      baseAvailable: item.availableQty,
+      units: units.length > 1 ? units : undefined,
     });
     if (item.requiresPrescription) {
       toast.warning(`${item.tradeName}: ${t("pos.prescriptionRequired")}`, { duration: 3500 });
     }
-    toast.success(`${lang === "AR" ? item.tradeName : item.tradeNameEn || item.tradeName} — ${t("pos.added")}`, { duration: 1500 });
+    toast.success(`${lang === "AR" ? item.tradeName : item.tradeNameEn || item.tradeName}${unit && units.length > 1 ? ` — ${lang === "AR" ? unit.unitName : unit.unitNameEn || unit.unitName}` : ""} — ${t("pos.added")}`, { duration: 1500 });
     searchRef.current?.focus();
+  };
+
+  // تبديل وحدة سطر في السلة — سعر جديد + إعادة حساب المتاح من الرصيد الأساسي
+  const changeCartUnit = (key: string, unitIdStr: string) => {
+    const line = cart.find((c) => c.key === key);
+    if (!line || !line.units) return;
+    const unit = line.units.find((u) => u.id === unitIdStr);
+    if (!unit) return;
+    const factor = unit.factor > 0 ? unit.factor : 1;
+    const baseAvail = line.baseAvailable ?? line.availableQty * (line.unitFactor || 1);
+    updateCartItem(key, {
+      unitId: unit.id,
+      unitName: unit.unitName,
+      unitFactor: factor,
+      unitPrice: unit.sellPrice,
+      availableQty: Math.floor(baseAvail / factor),
+      qty: Math.min(line.qty, Math.max(1, Math.floor(baseAvail / factor))),
+    });
   };
 
   const addService = (s: ServiceItem) => {
@@ -295,7 +349,7 @@ export default function POSScreen() {
       const invoice = await api("/invoices", {
         method: "POST",
         body: {
-          items: cart.map((c) => ({ productId: c.productId, qty: c.qty, discount: c.discount })),
+          items: cart.map((c) => ({ productId: c.productId, qty: c.qty, discount: c.discount, unitId: c.unitId || undefined })),
           customerId: customerId || null,
           paymentMethod,
           invoiceDiscount,
@@ -350,7 +404,7 @@ export default function POSScreen() {
       await api("/invoices/hold", {
         method: "POST",
         body: {
-          items: cart.map((c) => ({ productId: c.productId, name: c.name, qty: c.qty, unitPrice: c.unitPrice, discount: c.discount, taxRate: c.taxRate })),
+          items: cart.map((c) => ({ productId: c.productId, name: c.name, qty: c.qty, unitPrice: c.unitPrice, discount: c.discount, taxRate: c.taxRate, unitId: c.unitId || null, unitName: c.unitName || null, unitFactor: c.unitFactor || 1 })),
           customerId: customerId || null,
           branchId,
           invoiceDiscount,
@@ -378,7 +432,12 @@ export default function POSScreen() {
           qty: it.qty,
           unitPrice: it.unitPrice,
           taxRate: it.taxRate,
-          availableQty: found.availableQty + it.qty,
+          availableQty: Math.floor((found.availableQty / (it.unitFactor || 1)) + it.qty),
+          unitId: it.unitId || undefined,
+          unitName: it.unitName || undefined,
+          unitFactor: it.unitFactor || undefined,
+          baseAvailable: found.availableQty,
+          units: (found.units || []).length > 1 ? found.units : undefined,
         });
       }
     }
@@ -612,6 +671,11 @@ export default function POSScreen() {
                           </div>
                           <div className="text-end shrink-0">
                             <p className="font-bold text-primary text-sm">{fmtM(r.sellPrice)}</p>
+                            {(r.units || []).length > 1 && (
+                              <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">
+                                {r.units!.filter((u) => !u.isBase && !u.isDefault).slice(0, 2).map((u) => `${lang === "AR" ? u.unitName : u.unitNameEn || u.unitName} ${fmtM(u.sellPrice)}`).join(" • ")}
+                              </p>
+                            )}
                             <Badge variant={r.availableQty > 0 ? "secondary" : "destructive"} className="mt-1">
                               {r.availableQty > 0 ? `${t("pos.available")}: ${fmtQty(r.availableQty)}` : t("pos.outOfStock")}
                             </Badge>
@@ -660,7 +724,21 @@ export default function POSScreen() {
                       <div key={c.key} className="flex items-center gap-2 p-2.5 rounded-lg border bg-card">
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium truncate">{c.name}</p>
-                          <p className="text-xs text-muted-foreground">{fmtM(c.unitPrice)}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {fmtM(c.unitPrice)}{c.unitName && c.units && c.units.length > 1 ? ` / ${lang === "AR" ? c.unitName : c.units.find((u) => u.id === c.unitId)?.unitNameEn || c.unitName}` : ""}
+                          </p>
+                          {c.units && c.units.length > 1 && (
+                            <Select value={c.unitId || c.units.find((u) => u.isDefault || u.isBase)?.id || ""} onValueChange={(v) => changeCartUnit(c.key, v)}>
+                              <SelectTrigger className="h-6 mt-1 text-xs w-36"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                {c.units.map((u) => (
+                                  <SelectItem key={u.id} value={u.id}>
+                                    {lang === "AR" ? u.unitName : u.unitNameEn || u.unitName} — {fmtM(u.sellPrice)}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          )}
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
                           <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => updateCartQty(c.key, c.qty - 1)} aria-label="minus"><Minus className="h-3 w-3" /></Button>

@@ -21,6 +21,16 @@ export interface Branch {
   isDefault: boolean;
 }
 
+export interface CartUnit {
+  id: string;
+  unitName: string;
+  unitNameEn?: string;
+  factor: number;
+  sellPrice: number;
+  isBase: boolean;
+  isDefault: boolean;
+}
+
 export interface CartItem {
   key: string;
   productId: string;
@@ -30,9 +40,15 @@ export interface CartItem {
   unitPrice: number;
   discount: number;
   taxRate: number;
-  availableQty: number;
+  availableQty: number; // المتاح بوحدة البيع المختارة
   requiresPrescription?: boolean;
   batchId?: string;
+  // Multi-UoM — وحدة البيع المختارة
+  unitId?: string;
+  unitName?: string;
+  unitFactor?: number;
+  baseAvailable?: number; // المتاح بوحدة أساسية (لإعادة الحساب عند تبديل الوحدة)
+  units?: CartUnit[];
 }
 
 export interface AuthState {
@@ -61,6 +77,7 @@ interface AppState {
   addToCart: (item: Omit<CartItem, "key" | "discount">) => void;
   updateCartQty: (key: string, qty: number) => void;
   updateCartDiscount: (key: string, discount: number) => void;
+  updateCartItem: (key: string, patch: Partial<CartItem>) => void;
   removeFromCart: (key: string) => void;
   clearCart: () => void;
   setSettings: (s: any) => void;
@@ -84,16 +101,19 @@ export const useApp = create<AppState>()(
       setTheme: (theme) => set({ theme }),
       addToCart: (item) =>
         set((state) => {
-          const existing = state.cart.find((c) => c.productId === item.productId);
+          // Multi-UoM: دمج السطر لنفس المنتج بنفس وحدة البيع فقط
+          const existing = state.cart.find(
+            (c) => c.productId === item.productId && (c.unitId || null) === (item.unitId || null)
+          );
           if (existing) {
             const newQty = Math.min(existing.qty + item.qty, item.availableQty || 9999);
             return {
               cart: state.cart.map((c) =>
-                c.productId === item.productId ? { ...c, qty: newQty } : c
+                c.key === existing.key ? { ...c, qty: newQty } : c
               ),
             };
           }
-          return { cart: [...state.cart, { ...item, key: `${item.productId}-${Date.now()}`, discount: 0 }] };
+          return { cart: [...state.cart, { ...item, key: `${item.productId}-${item.unitId || "base"}-${Date.now()}`, discount: 0 }] };
         }),
       updateCartQty: (key, qty) =>
         set((state) => ({
@@ -104,6 +124,10 @@ export const useApp = create<AppState>()(
       updateCartDiscount: (key, discount) =>
         set((state) => ({
           cart: state.cart.map((c) => (c.key === key ? { ...c, discount: Math.max(0, discount) } : c)),
+        })),
+      updateCartItem: (key, patch) =>
+        set((state) => ({
+          cart: state.cart.map((c) => (c.key === key ? { ...c, ...patch } : c)),
         })),
       removeFromCart: (key) => set((state) => ({ cart: state.cart.filter((c) => c.key !== key) })),
       clearCart: () => set({ cart: [] }),

@@ -74,6 +74,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
             batchId: l.orig.batchId,
             name: l.orig.name,
             qty: l.qty,
+            unitId: l.orig.unitId,
+            unitName: l.orig.unitName,
+            unitFactor: l.orig.unitFactor || 1,
+            baseQty: round2(l.qty * (l.orig.unitFactor || 1)),
             unitPrice: l.orig.unitPrice,
             discount: unitD(l),
             taxRate: l.orig.taxRate,
@@ -82,25 +86,26 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
             costPrice: l.orig.costPrice,
           },
         });
-        // استعادة المخزون لنفس التشغيلة
+        // استعادة المخزون لنفس التشغيلة — بالمكافئ الأساسي (Multi-UoM)
+        const restoreQty = round2(l.qty * (l.orig.unitFactor || 1));
         if (l.orig.batchId) {
           const batch = await tx.batch.findUnique({ where: { id: l.orig.batchId } });
           if (batch) {
-            await tx.batch.update({ where: { id: batch.id }, data: { quantity: { increment: l.qty } } });
+            await tx.batch.update({ where: { id: batch.id }, data: { quantity: { increment: restoreQty } } });
           } else {
             const newBatch = await tx.batch.create({
               data: {
                 productId: l.orig.productId!, branchId: original.branchId,
                 batchNo: "RETURN", expiryDate: new Date(Date.now() + 365 * 86400000),
-                quantity: l.qty, costPrice: l.orig.costPrice,
+                quantity: restoreQty, costPrice: l.orig.costPrice,
               },
             });
             await tx.invoiceItem.updateMany({ where: { invoiceId: inv.id, name: l.orig.name }, data: { batchId: newBatch.id } });
           }
           await recordMovement(tx, {
             productId: l.orig.productId!, batchId: l.orig.batchId, branchId: original.branchId,
-            type: "SALE_REFUND", quantity: l.qty, refType: "RETURN", refId: no,
-            note: `مرتجع على فاتورة ${original.no}`, userId: user.id,
+            type: "SALE_REFUND", quantity: restoreQty, refType: "RETURN", refId: no,
+            note: `مرتجع على فاتورة ${original.no}${(l.orig.unitFactor || 1) !== 1 ? ` — ${l.qty} ${l.orig.unitName || "وحدة"} (المكافئ ${restoreQty})` : ""}`, userId: user.id,
           });
         }
         // تحديث الكمية المرتجعة في الفاتورة الأصلية

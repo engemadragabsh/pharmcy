@@ -78,20 +78,36 @@ export async function POST(req: NextRequest) {
       const lines: any[] = [];
       for (const it of items) {
         if (!it.productId || !it.qty || it.qty <= 0) throw new ApiError(400, "صنف غير صالح في السلة");
-        const product = await tx.product.findUnique({ where: { id: it.productId } });
+        const product = await tx.product.findUnique({ where: { id: it.productId }, include: { units: true } });
         if (!product) throw new ApiError(404, `المنتج غير موجود`);
         if (!product.isActive) throw new ApiError(400, `${product.tradeName}: هذا المنتج معطّل`);
         const qty = Number(it.qty);
-        const unitPrice = product.sellPrice;
+
+        // ── Multi-UoM: وحدة البيع المختارة — السعر والعامل تحوّل للمخزون ──
+        const unitRow = it.unitId
+          ? (product.units.find((u: any) => u.id === it.unitId) || null)
+          : (product.units.find((u: any) => u.isDefault) || product.units.find((u: any) => u.isBase) || null);
+        const unitFactor = unitRow && unitRow.factor > 0 ? unitRow.factor : 1;
+        const unitPrice = unitRow ? unitRow.sellPrice : product.sellPrice;
+        const unitName = unitRow ? (unitRow.unitName || "وحدة") : "وحدة";
+        const baseUnitName = product.units.find((u: any) => u.isBase)?.unitName || "وحدة أساسية";
+        const baseQty = Math.round(qty * unitFactor * 100) / 100;
+
         const discount = Math.max(0, Number(it.discount || 0));
         const base = unitPrice * qty;
         const net = Math.max(0, base - discount);
         const taxAmount = round2((net * product.taxRate) / 100);
         const total = round2(net + taxAmount);
-        const allocs = await allocateFefo(tx, product.id, branchId, qty, product.tradeName);
+        const allocs = await allocateFefo(tx, product.id, branchId, baseQty, product.tradeName, {
+          qtySold: qty, unitName, baseName: baseUnitName,
+        });
+        // تكلفة وحدة البيع الواحدة = إجمالي تكلفة المكافئ الأساسي ÷ عدد وحدات البيع
+        const totalBaseCost = allocs.reduce((s: number, a: any) => s + a.costPrice * a.qty, 0);
         lines.push({
           productId: product.id, name: product.tradeName, qty, unitPrice, discount,
-          taxRate: product.taxRate, taxAmount, total, costPrice: allocs.length ? round2(allocs.reduce((s, a) => s + a.costPrice * a.qty, 0) / qty) : 0,
+          unitId: unitRow?.id || null, unitName, unitFactor, baseQty, baseUnitName,
+          taxRate: product.taxRate, taxAmount, total,
+          costPrice: allocs.length ? round2(totalBaseCost / qty) : 0,
           allocs,
         });
       }
@@ -148,7 +164,9 @@ export async function POST(req: NextRequest) {
         await tx.invoiceItem.create({
           data: {
             invoiceId: inv.id, productId: l.productId, batchId: l.allocs[0]?.batchId || null,
-            name: l.name, qty: l.qty, unitPrice: l.unitPrice, discount: l.discount,
+            name: l.name, qty: l.qty, unitId: l.unitId, unitName: l.unitName,
+            unitFactor: l.unitFactor, baseQty: l.baseQty,
+            unitPrice: l.unitPrice, discount: l.discount,
             taxRate: l.taxRate, taxAmount: l.taxAmount, total: l.total, costPrice: l.costPrice,
           },
         });
@@ -156,6 +174,7 @@ export async function POST(req: NextRequest) {
           await recordMovement(tx, {
             productId: l.productId, batchId: a.batchId, branchId,
             type: "SALE", quantity: -a.qty, refType: "INVOICE", refId: no, userId: user.id,
+            note: l.unitFactor !== 1 ? `بيع ${l.qty} ${l.unitName} (المكافئ ${l.baseQty} ${l.baseUnitName})` : undefined,
           });
         }
       }
@@ -179,9 +198,9 @@ export async function POST(req: NextRequest) {
         if (rx) {
           for (const ri of rx.items) {
             if (ri.productId) {
-              const soldQty = lines.filter((l) => l.productId === ri.productId).reduce((s, l) => s + l.qty, 0);
-              if (soldQty > 0) {
-                await tx.prescriptionItem.update({ where: { id: ri.id }, data: { dispensedQty: soldQty } });
+              const soldBase = lines.filter((l) => l.productId === ri.productId).reduce((s, l) => s + l.baseQty, 0);
+              if (soldBase > 0) {
+                await tx.prescriptionItem.update({ where: { id: ri.id }, data: { dispensedQty: Math.round(soldBase) } });
               }
             }
           }

@@ -425,6 +425,31 @@ async function main() {
   }
   console.log("");
 
+  // 9-ب) Multi-UoM: وحدة البيع الأساسية لكل صنف جديد (علبة/زجاجة/أنبوب… factor=1)
+  const unitRecs = await db.unitOfMeasure.findMany();
+  const unitRecById = new Map(unitRecs.map((u) => [u.id, u]));
+  const createdProducts = await db.product.findMany({
+    where: { barcode: { in: rows.map((r) => r.barcode) } },
+    select: { id: true, unitId: true, sellPrice: true, wholesalePrice: true },
+  });
+  const puRows = createdProducts
+    .filter((p) => p.unitId)
+    .map((p) => ({
+      productId: p.id,
+      unitId: p.unitId,
+      unitName: unitRecById.get(p.unitId)?.name || "وحدة",
+      unitNameEn: unitRecById.get(p.unitId)?.nameEn || "Unit",
+      factor: 1,
+      sellPrice: p.sellPrice,
+      wholesalePrice: p.wholesalePrice || null,
+      isBase: true,
+      isDefault: true,
+    }));
+  for (let i = 0; i < puRows.length; i += 500) {
+    await db.productUnit.createMany({ data: puRows.slice(i, i + 500), skipDuplicates: true });
+  }
+  console.log(`🔖 وحدات البيع الأساسية (Multi-UoM): ${puRows.length}`);
+
   // 10) تقرير التحقق
   const total = await db.product.count();
   const distinctBC = await db.$queryRawUnsafe("SELECT COUNT(*) as c FROM (SELECT DISTINCT barcode FROM Product)");

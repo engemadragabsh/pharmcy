@@ -35,6 +35,7 @@ export async function GET(req: NextRequest) {
           activeIngredient: true,
           manufacturer: true,
           dosageForm: true,
+          units: { orderBy: [{ isBase: "desc" }, { factor: "desc" }] },
           batches: { where: { quantity: { gt: 0 } }, select: { quantity: true, branchId: true, expiryDate: true } },
         },
         orderBy: { createdAt: "desc" },
@@ -115,9 +116,72 @@ export async function POST(req: NextRequest) {
         notes: body.notes || null,
       },
     });
+
+    // ── Multi-UoM: الوحدة الأساسية + وحدات البيع الإضافية ──
+    if (body.unitId) {
+      const baseUnitRec = await db.unitOfMeasure.findUnique({ where: { id: body.unitId } });
+      await db.productUnit.create({
+        data: {
+          productId: product.id, unitId: body.unitId,
+          unitName: baseUnitRec?.name || "وحدة", unitNameEn: baseUnitRec?.nameEn || "Unit",
+          factor: 1, sellPrice: Number(sellPrice), wholesalePrice: Number(body.wholesalePrice || 0) || null,
+          isBase: true, isDefault: true,
+        },
+      });
+    }
+    await syncProductUnits(product.id, body.units, null);
+
     await logAudit({ userId: user.id, userName: user.fullName, action: "PRODUCT_CREATE", entity: "Product", entityId: product.id, details: `إضافة دواء: ${product.tradeName}` });
     return NextResponse.json(product, { status: 201 });
   } catch (e) {
     return handleApiError(e);
+  }
+}
+
+/**
+ * مزامنة وحدات البيع الإضافية (غير الأساسية) — Multi-UoM
+ * ترمي صفوفاً حسب المعرف، تنشئ الجديد، تحذف المحذوف؛ الوحدة الأساسية تُدار من unitId للمنتج
+ */
+async function syncProductUnits(productId: string, units: any[], fallbackBaseId: string | null) {
+  if (!Array.isArray(units)) return;
+  const extras = units.filter((u: any) => !u.isBase);
+  const keepIds = new Set(extras.filter((u: any) => u.id).map((u: any) => u.id));
+  const existing = await db.productUnit.findMany({ where: { productId } });
+  // حذف المحذوف (غير الأساسي وغير المرسل)
+  for (const row of existing) {
+    if (!row.isBase && !keepIds.has(row.id)) {
+      await db.productUnit.delete({ where: { id: row.id } });
+    }
+  }
+  for (const u of extras) {
+    const factor = Number(u.factor);
+    if (!isFinite(factor) || factor <= 0 || factor === 1) throw new ApiError(400, `عامل تحويل غير صالح للوحدة «${u.unitName || ""}» — يجب أن يكون أكبر من صفر ومختلفاً عن 1`);
+    const unitRec = u.unitId ? await db.unitOfMeasure.findUnique({ where: { id: u.unitId } }) : null;
+    const data = {
+      unitId: u.unitId || null,
+      unitName: u.unitName || unitRec?.name || "وحدة",
+      unitNameEn: u.unitNameEn || unitRec?.nameEn || null,
+      factor,
+      sellPrice: Number(u.sellPrice) || 0,
+      wholesalePrice: u.wholesalePrice != null && u.wholesalePrice !== "" ? Number(u.wholesalePrice) : null,
+      barcode: u.barcode?.trim() || null,
+      isDefault: !!u.isDefault,
+    };
+    if (u.id) {
+      await db.productUnit.update({ where: { id: u.id }, data });
+    } else {
+      await db.productUnit.create({ data: { productId, ...data } });
+    }
+  }
+  // وحدة افتراضية واحدة فقط — إن لم توجد: الأساسية افتراضية
+  const rows = await db.productUnit.findMany({ where: { productId } });
+  const defaults = rows.filter((r) => r.isDefault);
+  if (defaults.length === 0) {
+    const base = rows.find((r) => r.isBase);
+    if (base) await db.productUnit.update({ where: { id: base.id }, data: { isDefault: true } });
+  } else if (defaults.length > 1) {
+    for (const d of defaults.slice(1)) {
+      await db.productUnit.update({ where: { id: d.id }, data: { isDefault: false } });
+    }
   }
 }

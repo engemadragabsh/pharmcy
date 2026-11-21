@@ -88,7 +88,8 @@ export async function allocateFefo(
   productId: string,
   branchId: string,
   qty: number,
-  productName?: string
+  productName?: string,
+  unitInfo?: { qtySold: number; unitName: string; baseName?: string }
 ): Promise<FefoAlloc[]> {
   if (qty <= 0) return [];
   const batches = await tx.batch.findMany({
@@ -108,11 +109,15 @@ export async function allocateFefo(
     allocs.push({ batchId: b.id, qty: take, costPrice: b.costPrice, batchNo: b.batchNo });
     need -= take;
   }
-  if (need > 0) {
-    const available = batches.reduce((s, b) => s + b.quantity, 0);
+  if (need > 0.000001) {
+    const available = Math.round(batches.reduce((s, b) => s + b.quantity, 0) * 100) / 100;
+    const req =
+      unitInfo && unitInfo.qtySold > 0
+        ? `${unitInfo.qtySold} ${unitInfo.unitName} (المكافئ ${Math.round(qty * 100) / 100} ${unitInfo.baseName || "وحدة أساسية"})`
+        : `${qty}`;
     throw new ApiError(
       400,
-      `المخزون غير كافٍ: ${productName || "المنتج"} — المتاح ${available} والمطلوب ${qty}`
+      `المخزون غير كافٍ: ${productName || "المنتج"} — المطلوب ${req} والمتاح ${available}`
     );
   }
   for (const a of allocs) {
