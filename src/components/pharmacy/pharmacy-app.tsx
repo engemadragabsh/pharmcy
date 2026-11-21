@@ -3,8 +3,9 @@
 /**
  * الجذر — إدارة الجلسة والتنقل بين الشاشات (SPA داخل /)
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useApp, canAccess } from "@/lib/store";
+import { api } from "@/lib/client-api";
 import LoginScreen from "./login-screen";
 import AppShell from "./app-shell";
 import DashboardScreen from "./dashboard-screen";
@@ -24,7 +25,24 @@ import { ShieldAlert } from "lucide-react";
 
 export default function PharmacyApp() {
   const auth = useApp((s) => s.auth);
+  const setBranches = useApp((s) => s.setBranches);
   const [active, setActive] = useState("dashboard");
+
+  // تحميل الفروع عند الإقلاع — الجلسة تُستعاد محلياً لكن قائمة الفروع كانت
+  // تُحمّل فقط لحظة تسجيل الدخول، فبعد أي refresh تبقى فارغة في كل الشاشات
+  // (كمبو الفرع في استلام بضاعة / التحويل / الجرد ومحدد الفرع بالشريط العلوي)
+  useEffect(() => {
+    const loadBranches = () => {
+      const st = useApp.getState();
+      if (!st.auth || st.branches.length > 0) return;
+      api("/branches")
+        .then((d) => setBranches(d.items || []))
+        .catch(() => {});
+    };
+    loadBranches();
+    window.addEventListener("focus", loadBranches);
+    return () => window.removeEventListener("focus", loadBranches);
+  }, [setBranches]);
 
   if (!auth) {
     return <LoginScreen />;

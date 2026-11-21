@@ -239,7 +239,12 @@ export default function InventoryScreen() {
         icon={Warehouse}
         title={t("inv.title")}
         actions={
-          <Button onClick={() => setReceiveOpen(true)} className="gap-2">
+          <Button onClick={() => {
+            const st = useApp.getState();
+            const pre = st.branchId && branches.some((b) => b.id === st.branchId) ? st.branchId : "";
+            setRForm({ productId: "", branchId: pre, batchNo: "", expiryDate: "", qty: "", costPrice: "", shelfLocation: "" });
+            setReceiveOpen(true);
+          }} className="gap-2">
             <PackagePlus className="h-4 w-4" /> {t("inv.receive")}
           </Button>
         }
@@ -576,6 +581,11 @@ export default function InventoryScreen() {
               <Select value={rForm.branchId} onValueChange={(v) => setRForm({ ...rForm, branchId: v })}>
                 <SelectTrigger className="mt-1"><SelectValue placeholder="—" /></SelectTrigger>
                 <SelectContent>
+                  {branches.length === 0 && (
+                    <div className="px-3 py-2 text-sm text-muted-foreground" dir="rtl">
+                      {lang === "AR" ? "لا توجد فروع محمّلة — انتظر لحظة أو أعد فتح النافذة" : "No branches loaded"}
+                    </div>
+                  )}
                   {branches.map((b) => <SelectItem key={b.id} value={b.id}>{lang === "AR" ? b.name : b.nameEn}</SelectItem>)}
                 </SelectContent>
               </Select>
