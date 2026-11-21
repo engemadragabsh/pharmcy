@@ -53,7 +53,8 @@ server.log
 # Skills directory
 /skills/
 # database (auto-built & seeded on first run — kept out of the repo)
-/db/
+/db/*
+!/db/custom.db
 
 # workspace artifacts (not part of the project)
 /download/
